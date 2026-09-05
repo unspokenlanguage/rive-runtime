@@ -66,11 +66,11 @@ Some templates implement their behavior as **Rive Scripts** (Luau) rather than p
 These are pulled from GitHub by Rive's own build (`scripting/premake5.lua`) and are **not** in the rive-runtime source drop. Clone them into `dependencies/`:
 ```bash
 # from rive-runtime/dependencies
-git clone --depth 1 -b rive_0_731 https://github.com/luigi-rosso/luau.git        luau
+git clone --depth 1 -b rive_0_734 https://github.com/luigi-rosso/luau.git        luau
 git clone --depth 1 -b rive_0_2   https://github.com/luigi-rosso/libhydrogen.git libhydrogen
 ```
 > [!IMPORTANT]
-> The refs above (`rive_0_731`, `rive_0_2`) are pins for this runtime version. **After every rive-runtime sync, re-read `scripting/premake5.lua`** and match the exact refs — Rive bumps them periodically:
+> The refs above (`rive_0_734`, `rive_0_2`) are pins for this runtime version. **After every rive-runtime sync, re-read `scripting/premake5.lua`** and match the exact refs — Rive bumps them periodically:
 > `grep "dependency.github('luigi-rosso" scripting/premake5.lua`
 
 ### 4.2 CMake wiring (already in `CMakeLists.txt`)

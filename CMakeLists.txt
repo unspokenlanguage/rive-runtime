@@ -32,11 +32,11 @@ endif()
 
 set(HARFBUZZ_DIR  "${RIVE_DEPS_DIR}/rive-app_harfbuzz_rive_10.1.0")
 set(SHEENBIDI_DIR "${RIVE_DEPS_DIR}/Tehreer_SheenBidi_v2.6")
-set(YOGA_DIR      "${RIVE_DEPS_DIR}/rive-app_yoga_rive_changes_v2_0_1_2")
+set(YOGA_DIR      "${RIVE_DEPS_DIR}/rive-app_yoga_rive_changes_v2_0_1_3_grid")
 set(MINIAUDIO_DIR "${RIVE_DEPS_DIR}/rive-app_miniaudio_rive_changes_5")
 set(DX_HEADERS_DIR "${RIVE_DEPS_DIR}/microsoft_DirectX-Headers_v1.615.0")
 # Rive Scripting (Luau VM + libhydrogen). Cloned by UPDATING_RIVE.md §5:
-#   git clone --depth 1 -b rive_0_731 https://github.com/luigi-rosso/luau.git        dependencies/luau
+#   git clone --depth 1 -b rive_0_734 https://github.com/luigi-rosso/luau.git        dependencies/luau
 #   git clone --depth 1 -b rive_0_2   https://github.com/luigi-rosso/libhydrogen.git dependencies/libhydrogen
 set(LUAU_DIR        "${RIVE_DEPS_DIR}/luau")
 set(LIBHYDROGEN_DIR "${RIVE_DEPS_DIR}/libhydrogen")
@@ -98,6 +98,8 @@ set(YOGA_SOURCES
     "${YOGA_DIR}/yoga/Yoga.cpp"
     "${YOGA_DIR}/yoga/event/event.cpp"
     "${YOGA_DIR}/yoga/log.cpp"
+    "${YOGA_DIR}/yoga/YGGridTrackList.cpp"   # grid layout: yoga rive_changes_v2_0_1_3_grid (rive >= v0.1.359)
+    "${YOGA_DIR}/yoga/grid/GridLayout.cpp"
 )
 add_library(rive_yoga STATIC ${YOGA_SOURCES})
 target_include_directories(rive_yoga PUBLIC "${YOGA_DIR}")
@@ -153,6 +155,7 @@ file(GLOB_RECURSE RIVE_CORE_SOURCES "${RIVE_RUNTIME_DIR}/src/*.cpp")
 # instead of compiling to empty stubs. Apple-only lua .mm variants are excluded
 # by the font_hb_apple filter / the .cpp glob (which ignores .mm).
 list(FILTER RIVE_CORE_SOURCES EXCLUDE REGEX ".*/profiler/.*")
+list(FILTER RIVE_CORE_SOURCES EXCLUDE REGEX ".*/wasm/.*") # WASM VM needs WAMR (not built); its call sites are #ifdef WITH_RIVE_SCRIPTING_WASM, which stays OFF
 # Exclude Apple-specific font sources
 list(FILTER RIVE_CORE_SOURCES EXCLUDE REGEX ".*font_hb_apple.*")
 
@@ -184,6 +187,7 @@ target_compile_definitions(rive_core PUBLIC
     WITH_RIVE_TEXT
     WITH_RIVE_LAYOUT
     WITH_RIVE_SCRIPTING
+    WITH_RIVE_SCRIPTING_LUAU # upstream split: this selects the Luau VM impl (m_scriptingVM on Artboard/File); MUST match on rive_core + rive_renderer + rive module (ABI)
 )
 target_compile_definitions(rive_core PRIVATE
     MA_NO_RESOURCE_MANAGER
@@ -265,6 +269,7 @@ target_compile_definitions(rive_renderer PUBLIC
     WITH_RIVE_TEXT
     WITH_RIVE_LAYOUT
     WITH_RIVE_SCRIPTING
+    WITH_RIVE_SCRIPTING_LUAU # upstream split: this selects the Luau VM impl (m_scriptingVM on Artboard/File); MUST match on rive_core + rive_renderer + rive module (ABI)
     RIVE_DESKTOP_GL       # Referenced in some shared renderer headers
 )
 
