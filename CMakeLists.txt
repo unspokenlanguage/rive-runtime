@@ -35,7 +35,7 @@ set(SHEENBIDI_DIR "${RIVE_DEPS_DIR}/Tehreer_SheenBidi_v2.6")
 set(YOGA_DIR      "${RIVE_DEPS_DIR}/rive-app_yoga_rive_changes_v2_0_1_3_grid")
 set(MINIAUDIO_DIR "${RIVE_DEPS_DIR}/rive-app_miniaudio_rive_changes_5")
 set(DX_HEADERS_DIR "${RIVE_DEPS_DIR}/microsoft_DirectX-Headers_v1.615.0")
-# Rive Scripting (Luau VM + libhydrogen). Cloned by UPDATING_RIVE.md §5:
+# Rive Scripting (Luau VM + libhydrogen). Cloned per UPDATING_RIVE.md §4 (dependency pins):
 #   git clone --depth 1 -b rive_0_734 https://github.com/luigi-rosso/luau.git        dependencies/luau
 #   git clone --depth 1 -b rive_0_2   https://github.com/luigi-rosso/libhydrogen.git dependencies/libhydrogen
 set(LUAU_DIR        "${RIVE_DEPS_DIR}/luau")
