@@ -104,6 +104,13 @@ set(YOGA_SOURCES
 add_library(rive_yoga STATIC ${YOGA_SOURCES})
 target_include_directories(rive_yoga PUBLIC "${YOGA_DIR}")
 target_compile_definitions(rive_yoga PUBLIC YOGA_EXPORT=)
+# The grid yoga (rive_changes_v2_0_1_3_grid) uses C++17 nested namespaces and C++20
+# designated initializers (grid/AutoPlacement.h, grid/TrackSizing.h). clang/gcc accept
+# those as extensions at C++17; MSVC requires /std:c++20 -- without it: C2429 / C7555.
+# PRIVATE on purpose: the grid headers never reach rive_core, which stays C++17 to
+# match upstream's core cppdialect. MSVC's STL is binary-compatible across /std:
+# modes, so yoga@20 + core@17 is the same mixed arrangement already verified safe.
+target_compile_features(rive_yoga PRIVATE cxx_std_20)
 if(MSVC)
     # /fp:precise is REQUIRED here. The engine sets /fp:fast globally
     # (Bootstrap_Windows.cmake), but Yoga represents every "undefined" value as a
