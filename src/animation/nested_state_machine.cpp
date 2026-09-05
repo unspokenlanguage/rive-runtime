@@ -25,6 +25,11 @@ bool NestedStateMachine::advance(float elapsedSeconds, bool newFrame)
 
 void NestedStateMachine::initializeAnimation(ArtboardInstance* artboard)
 {
+    if (animationId() == (uint32_t)-1)
+    {
+        int defaultId = artboard->defaultStateMachineIndex();
+        animationId(defaultId >= 0 ? defaultId : 0);
+    }
     m_StateMachineInstance = artboard->stateMachineAt(animationId());
     if (m_StateMachineInstance != nullptr)
     {

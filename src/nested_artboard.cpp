@@ -619,6 +619,21 @@ StatusCode NestedArtboard::onAddedClean(CoreContext* context)
         {
             animation->initializeAnimation(m_Instance.get());
         }
+
+        if (m_NestedAnimations.empty() && m_Instance->stateMachineCount() > 0)
+        {
+            auto nestedStateMachine = new NestedStateMachine();
+            int defaultId = m_Instance->defaultStateMachineIndex();
+            nestedStateMachine->animationId(defaultId >= 0 ? defaultId : 0);
+            nestedStateMachine->initializeAnimation(m_Instance.get());
+            addNestedAnimation(nestedStateMachine);
+            // Take ownership so the injected default state machine is released
+            // with this NestedArtboard (matches how updateComponents binds nested
+            // state machines). See CUSTOM_PATCHES.md Patch 6.
+            m_boundNestedStateMachine.reset(
+                static_cast<NestedStateMachine*>(nestedStateMachine));
+        }
+
         m_referencedArtboard->host(this);
         // Children are linked by now, so an authored origin override child is
         // resolvable; push it onto the mounted instance.
