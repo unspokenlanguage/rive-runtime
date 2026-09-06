@@ -20,29 +20,38 @@ Companion documents: `CUSTOM_PATCHES.md` (what we patch and why, with the retire
 | 8 | Regenerate shaders (no `make` here) | 105 minify outputs + 8 `d3d/*.h` |
 | 9 | Touch-all → build → obj-date histogram → delete orphans | `ABI GUARD PASS` |
 | 10 | The 7 functional tests (§8) on the real exe | all pass |
-| 11 | Blob-level index-vs-tag proof (+ staged-set / CR / spot checks) → one parent commit → push | DIFFER = patched sources only |
+| 11 | `git diff runtime-v0.1.N..HEAD --stat` on the branch = patched sources + CMakeLists + docs + dependencies → push branch to the fork → bump the submodule in AirPlayEngine **and** in the editor (run its test suite) | both parents pin the same commit |
 
 Two failures **build clean and only break on air** — a missing scripting define (§5) and a stale/mismatched object (§7). Steps 9 and 10 exist for those. Never skip them.
 
 ---
 
-## 1. Repository layout — parent vs. workbench
+## 1. Repository layout — one fork, two consumers (since 2026-09-05)
 
-- **Parent repo (`CasparFork`)** tracks `rive-runtime/` as plain files (8.5k paths, mode 100644, stored LF, checked out CRLF). It is the **source of truth and the rollback point**. It also owns the vendored `rive-runtime/dependencies/*/` trees.
-- **Nested workbench (`rive-runtime/.git`)** is an *unregistered* clone of `https://github.com/rive-app/rive-runtime.git` living inside the tracked tree. It holds full upstream history so git can **3-way-merge** our patches instead of us re-deriving them. It is not a submodule and must never become one — the parent stays self-contained. Its `.git/info/exclude` carries `dependencies/*/` and `**/.gradle/`.
-- The parent's `.gitignore` hides `rive-runtime/build/`, `rive-runtime/.vscode/` and `*/build/` (23 upstream paths: premake/IDE scripts we never use). They are not tracked and never were — an expected, harmless gap the blob-level check in §9 will list as *upstream-only*.
-- **`.rive_head`** is Rive's *monorepo* commit SHA, not a runtime commit — but it is a unique fingerprint of the upstream commit our copy came from (see §2 step 2).
-- Upstream tags **every** commit on `main` as `runtime-v0.1.N`, so the tip is always a tagged release. Sync to a tag, and record both tags in the sync log.
-- Workbench branches from the last sync: `airz/patches-on-4a10679b` (our patches on v0.1.230) and `airz/merge-v0.1.359` (result). Keep them; they are the diff history the parent cannot show.
+- **The runtime lives in the fork `https://github.com/unspokenlanguage/rive-runtime`** (remote `origin`;
+  `upstream` = `https://github.com/rive-app/rive-runtime`). Branch **`airz/merge-<tag>`** = upstream tag
+  + our patches (`CUSTOM_PATCHES.md`) + `CMakeLists.txt` + these docs + the vendored `dependencies/<vendor>_<name>_<tag>/`
+  trees (tracked on the branch since 2026-09-05, so a fresh clone builds).
+- **AirPlayEngine (`CasparFork`) and the airZStudio editor both consume that branch as a git submodule
+  `rive-runtime/`**, pinned to the same commit. Preview and playout run identical code by construction.
+  Bump both parents to the new commit in the same sync (the editor bump also re-runs its exporter tests,
+  which are the format check — see §8b).
+- There is no separate workbench clone any more: the submodule checkout *is* the clone with full upstream
+  history, so 3-way merges of our patches work in place. `.rive_head` is Rive's monorepo SHA — a fingerprint
+  of the upstream commit (see §2 step 2).
+- Rollback points: the parent tag `rive-pre-submodule-2026-09-05` (last plain-file tree) and every
+  `airz/merge-<tag>` branch kept on the fork.
+- Upstream tags **every** commit on `main` as `runtime-v0.1.N`; sync to a tag and record both tags in the sync log.
 
 ---
 
 ## 2. Sync procedure
 
-1. **Rollback point first.**
+1. **Rollback point first** (in the parent — AirPlayEngine — and note the editor's current submodule commit):
    ```bash
    git tag -a rive-pre-sync-YYYY-MM-DD -m "parent state before rive-runtime sync" && git push origin rive-pre-sync-YYYY-MM-DD
    ```
+   Everything below runs **inside `rive-runtime/` (the submodule)**: `git fetch upstream --tags` brings the new tag.
 2. **Find the baseline** — the upstream commit our tree was vendored from:
    ```bash
    cd rive-runtime && git fetch origin --tags
@@ -91,7 +100,7 @@ For **every** patch in `CUSTOM_PATCHES.md`, before re-applying anything:
 
 ## 4. Dependency pins — re-check after EVERY sync
 
-Upstream's pins live in `dependencies/premake5_*_v2.lua` and `scripting/premake5.lua`. Ours are the vendored `dependencies/<vendor>_<name>_<tag>/` trees, **tracked by the parent** (the workbench ignores them). As of `runtime-v0.1.359`:
+Upstream's pins live in `dependencies/premake5_*_v2.lua` and `scripting/premake5.lua`. Ours are the vendored `dependencies/<vendor>_<name>_<tag>/` trees, **tracked on the fork branch** (since 2026-09-05; before that the parent tracked them). As of `runtime-v0.1.359`:
 
 | Dependency | Upstream pin | Ours | Verdict |
 |---|---|---|---|
