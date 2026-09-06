@@ -2,7 +2,7 @@
 
 What we change in `rive-runtime/` relative to upstream (`https://github.com/rive-app/rive-runtime.git`), why, and — just as important — what we **used to** change and no longer need to. The sync procedure that keeps this list honest is `UPDATING_RIVE.md`; its §3 defines the triage rule: *every patch is re-verified against fresh upstream on every sync; anything upstream now covers moves to "Retired" with evidence.*
 
-**Currently at:** `runtime-v0.1.359` (2026-09-05). **Active patches: 3** (5, 6, 7). **Retired: 4** (1, 2, 3, 4) + one null guard.
+**Currently at:** `runtime-v0.1.359` (2026-09-05) — fork `unspokenlanguage/rive-runtime`, branch `airz/merge-v0.1.359`, consumed as a submodule by AirPlayEngine and the airZStudio editor, which must pin the same commit. **Active patches: 3** (5, 6, 7). **Retired: 4** (1, 2, 3, 4) + one null guard.
 
 ---
 
@@ -361,3 +361,4 @@ Patches upstream now covers, or that turned out to be no-ops. Retired after the 
 | Date | From → To | `.rive_head` | Notes |
 |---|---|---|---|
 | 2026-09-05 | `runtime-v0.1.230` (`4a10679b`) → `runtime-v0.1.359` (`621f2a2e`), 129 upstream commits | `9e498b2635…` → `a87af1c977…` | Git 3-way rebase in the nested workbench (`UPDATING_RIVE.md` §1). Kept P5, P6, P7. **P1/P2/P3 retired** — dropped test-first, then all 7 on-air checks (`UPDATING_RIVE.md` §8) passed on unmodified upstream 2026-09-05. Yoga → `v2_0_1_3_grid` (10 grid symbols required), `rive_yoga` → C++20. Luau → `rive_0_734`. HarfBuzz stays `10.1.0` (only Apple-only `hb_ct_*` missing). Added `WITH_RIVE_SCRIPTING_LUAU`; excluded `src/wasm`. Full record: `docs/RIVE_SYNC_PLAN_2026-09.md`. |
+| 2026-09-05 | layout change, same runtime: plain-file tree → **submodule** on fork branch `airz/merge-v0.1.359` (`3eb17fe3`, dependency trees vendored on the branch in `4e9d14ee`); editor pinned to the same commit | unchanged | Content byte-identical to the tracked tree; rollback tag `rive-pre-submodule-2026-09-05`. Docs reconciled the same day (`upstream` remote + tags were missing from the checkout; §2 step 2, §8b, §9 rewritten for the two-parent layout). |

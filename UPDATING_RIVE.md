@@ -2,7 +2,7 @@
 
 The playbook for syncing `rive-runtime/` to a newer upstream release **without losing our patches and without shipping a broken binary**. It is written for the next person (or agent) doing the sync: follow it top to bottom. Every rule here was paid for — §10 records what went wrong the last time and how it was fixed, §11 lists advice from older revisions of this file that is now obsolete.
 
-Companion documents: `CUSTOM_PATCHES.md` (what we patch and why, with the retired/ADDRESSED record) and `docs/RIVE_SYNC_PLAN_2026-09.md` (the full log of the last sync, including every command that was actually run).
+Companion documents: `CUSTOM_PATCHES.md` (what we patch and why, with the retired/ADDRESSED record), AirPlayEngine's `docs/RIVE_RUNTIME_SUBMODULE_HANDOFF.md` (the fork + submodule layout and the daily rules shared with the editor) and `docs/RIVE_SYNC_PLAN_2026-09.md` (the full log of the last sync, including every command that was actually run).
 
 ---
 
@@ -11,9 +11,9 @@ Companion documents: `CUSTOM_PATCHES.md` (what we patch and why, with the retire
 | Step | What | Proof it worked |
 |---|---|---|
 | 1 | Tag + push the parent (`rive-pre-sync-YYYY-MM-DD`) | tag on origin |
-| 2 | Find the baseline via the `.rive_head` fingerprint | `git describe --tags <baseline>` prints our old tag |
-| 3 | `reset --mixed` + `add --renormalize` → one patch commit on the baseline | `diff --cached --stat` = only patched files |
-| 4 | `rebase --onto runtime-v0.1.N` | guard-rail diff = patched files + `CMakeLists.txt` + 2 docs |
+| 2 | In the submodule: `upstream` remote present, `git fetch upstream --tags` | `git tag -l runtime-v0.1.N` prints the tag |
+| 3 | Know the base: our branch = `runtime-v0.1.<current>` + N airz commits | `git rev-list --count runtime-v0.1.<current>..HEAD` matches expectations |
+| 4 | New branch `airz/merge-v0.1.N`, `rebase --onto runtime-v0.1.N runtime-v0.1.<current>` | guard-rail diff = patched sources + `CMakeLists.txt` + docs + `dependencies/` |
 | 5 | Triage every patch: upstream has it? drop it → ADDRESSED | `CUSTOM_PATCHES.md` updated |
 | 6 | Re-check every dependency pin with the symbol scan | 0 `MISSING` |
 | 7 | Absorb source churn into `CMakeLists.txt` | configure passes |
@@ -47,39 +47,37 @@ Two failures **build clean and only break on air** — a missing scripting defin
 
 ## 2. Sync procedure
 
-1. **Rollback point first** (in the parent — AirPlayEngine — and note the editor's current submodule commit):
+1. **Rollback point first** — in AirPlayEngine, and note the editor's current submodule commit (`git -C rive-runtime rev-parse HEAD` in both parents must be equal before you start):
    ```bash
    git tag -a rive-pre-sync-YYYY-MM-DD -m "parent state before rive-runtime sync" && git push origin rive-pre-sync-YYYY-MM-DD
    ```
-   Everything below runs **inside `rive-runtime/` (the submodule)**: `git fetch upstream --tags` brings the new tag.
-2. **Find the baseline** — the upstream commit our tree was vendored from:
+   Everything below runs **inside `rive-runtime/` (the submodule)**.
+2. **Get upstream's tags.** The fork clone carries the upstream *commits* (they are ancestors of our branch) but not the `runtime-v*` *tags*, and a fresh checkout has no `upstream` remote — both were missing right after the 2026-09-05 conversion, so add them once per checkout:
    ```bash
-   cd rive-runtime && git fetch origin --tags
-   git log --all --format='%h %ad %s' --date=short -S"$(tr -d '\r\n' < .rive_head)" -- .rive_head   # OLDEST hit = baseline
-   git describe --tags <baseline>
+   git remote get-url upstream 2>/dev/null || git remote add upstream https://github.com/rive-app/rive-runtime.git
+   git fetch upstream --tags
+   git tag -l 'runtime-v0.1.N'                     # must print the tag you are syncing to
    ```
-3. **Make our delta one commit on the baseline.** `reset --mixed` moves HEAD+index and leaves the worktree alone; on Windows it then reports thousands of "modified" files — CRLF stat churn, not content. `--renormalize` clears it and stages only real changes:
+   (If the base tag of the current branch is ever unknown, `.rive_head` is Rive's monorepo SHA and a unique fingerprint of the upstream commit: `git log --all -S"$(tr -d '\r\n' < .rive_head)" -- .rive_head` — oldest hit is the base.)
+3. **Know the base.** Our branch is *upstream tag + our commits* (2026-09: `runtime-v0.1.359` + 7 airz commits: P5/P6 + CMake, build-system updates, docs, vendored dependencies). Check it before rebasing so a surprise shows up here, not mid-rebase:
    ```bash
-   git reset --mixed <baseline>
-   git add --renormalize -- . ':(exclude)tests/android_tests/.gradle'
-   git diff --cached --stat        # MUST be just the patched files (5 in 2026-09: 2 .cpp, CMakeLists.txt, 2 docs)
-   git checkout -b airz/patches-on-<baseline-short>
-   git commit -m "airz: custom patches on top of upstream <old-tag>"
+   git rev-list --count runtime-v0.1.<current>..HEAD          # the airz commit count you expect
+   git diff runtime-v0.1.<current>..HEAD --name-only | grep -v '^dependencies/'   # patched sources + CMakeLists.txt + docs only (--stat abbreviates paths; use --name-only)
    ```
-   If the stat shows anything unexpected, stop and explain it before continuing (a dead file, a stray edit) — do not carry it across.
-4. **Rebase onto the new tag:**
+   Optional: squash the airz commits into one before rebasing so every conflict is resolved once (`git checkout -b tmp && git reset --soft runtime-v0.1.<current> && git commit`), then rebase that.
+4. **Rebase onto the new tag on a new branch** (branch names are `airz/merge-v0.1.N`, matching the existing `airz/merge-v0.1.359`):
    ```bash
-   git checkout -b airz/merge-<new-tag>
-   git rebase --onto runtime-v0.1.N <baseline>
+   git checkout -b airz/merge-v0.1.N
+   git rebase --onto runtime-v0.1.N runtime-v0.1.<current>
    ```
-   Only files that upstream touched *and* we patched conflict. In a rebase **`--ours` is upstream** (the branch you are rebasing onto) and **`--theirs` is our patch** — the opposite of a merge.
+   Only files that upstream touched *and* we patched conflict. In a rebase **`--ours` is upstream** (the branch you are rebasing onto) and **`--theirs` is our patch** — the opposite of a merge. The vendored `dependencies/` commit replays untouched unless upstream added a file at the same path.
 5. **Triage each conflicting (and each non-conflicting!) patch** per §3. A patch that applied *cleanly* is easy to overlook: in 2026-09 P3 auto-applied and had to be explicitly reverted to upstream (`git checkout runtime-v0.1.N -- <file>` + amend).
 6. **Guard-rail:**
    ```bash
    git diff runtime-v0.1.N..HEAD --stat
    ```
-   must list **only** the intended patched sources + `CMakeLists.txt` + `CUSTOM_PATCHES.md` + `UPDATING_RIVE.md`. Anything else is a leaked conflict resolution. Note the new `.rive_head` value now (`tr -d '\r\n' < .rive_head`) for the parent commit.
-7. Continue with §4 (pins), §5 (build system), §6 (shaders), §7 (build + guard), §8 (tests), §9 (parent commit).
+   must list **only** the intended patched sources + `CMakeLists.txt` + `CUSTOM_PATCHES.md` + `UPDATING_RIVE.md` + `dependencies/`. Anything else is a leaked conflict resolution. Note the new `.rive_head` value now (`tr -d '\r\n' < .rive_head`) for the parent commit.
+7. Continue with §4 (pins), §5 (build system), §6 (shaders), §7 (build + guard), §8 (tests), §8b (editor), §9 (publish + bump both parents).
 
 ---
 
@@ -127,7 +125,7 @@ git clone --depth 1 -b rive_0_734 https://github.com/luigi-rosso/luau.git       
 git clone --depth 1 -b rive_0_2   https://github.com/luigi-rosso/libhydrogen.git libhydrogen
 grep "dependency.github('luigi-rosso" scripting/premake5.lua      # the authoritative luau/libhydrogen refs
 ```
-Remove the old vendored tree, update the `*_DIR` variable in `CMakeLists.txt`, and re-check the explicit source list if the library has one (yoga does).
+Remove the old vendored tree, update the `*_DIR` variable in `CMakeLists.txt`, re-check the explicit source list if the library has one (yoga does), and commit the new tree on the branch (it is what makes a fresh `--recurse-submodules` clone build).
 
 ---
 
@@ -140,7 +138,7 @@ Remove the old vendored tree, update the `*_DIR` variable in `CMakeLists.txt`, a
 - **Defines — ABI critical.** `WITH_RIVE_TEXT`, `WITH_RIVE_LAYOUT`, `WITH_RIVE_SCRIPTING`, **`WITH_RIVE_SCRIPTING_LUAU`** are PUBLIC on `rive_core` *and* `rive_renderer` and thus reach the `rive` module. `WITH_RIVE_SCRIPTING` adds `m_scriptingVM` to `Artboard`/`File` in public headers; `_LUAU` (upstream split it out in 2026) selects the Luau VM implementation and gates the same member. A mismatch between targets changes struct sizes → silent stack corruption on air. **Without `_LUAU` everything builds and scripting runs as inert stubs**: data populates, nothing animates. Whenever upstream adds a `WITH_RIVE_*` define, grep `include/` for it and decide.
 - **C++ standard per target — do not change casually:** `rive_yoga` **C++20** (its `grid/*.h` use designated initializers; MSVC gates them on `/std:c++20`, clang/gcc accept them at C++17 which is why upstream's `cppdialect('C++17')` works), `rive_core` **C++17** (upstream's core dialect; no `yoga/*.h` includes `grid/`, so the C++20 headers never reach it), `rive_renderer` **C++20**. MSVC's STL is binary-compatible across `/std:` modes, so the mix is safe.
 - **`/fp:precise` on `rive_yoga`, `rive_core`, `luau_vm`** — the engine sets `/fp:fast` globally (`src/CMakeModules/Bootstrap_Windows.cmake`) and that folds Yoga's NaN-based "undefined" checks to constants: every layout resolves to 0×0 (see `CUSTOM_PATCHES.md` Patch 7). Any new target that compiles Yoga or Luau sources needs it too.
-- **Engine-side API drift**: the calls `modules/rive/producer/rive_producer.cpp` makes (`File::import`, `createDefaultViewModelInstance`, `bindViewModelInstance`, `syncStyleChangesWithUpdate`, …) — the compiler finds these, but read the upstream changelog for semantic changes.
+- **Engine-side API drift**: the calls `src/modules/rive/producer/rive_producer.cpp` makes (`File::import`, `createDefaultViewModelInstance`, `bindViewModelInstance`, `syncStyleChangesWithUpdate`, …) — the compiler finds these, but read the upstream changelog for semantic changes.
 
 Not rive-specific but bites here: if `build/` was wiped, CMake tries to download TBB/SFML/CEF from private mirrors and fails — copy the archives from `dist_\external\` into `build\external\` before configuring.
 
@@ -205,54 +203,52 @@ Run on the freshly built `build/shell/Release/airZstudio.exe` with the real temp
 
 Upstream's unit-test assets help for 1–2: `tests/unit_tests/assets/stateful_component_image_test.riv`, `image_fit_alignment_updated_test.riv`.
 
+### 8b. The editor side — same commit, its tests are the format check
+
+The airZStudio editor (`airZStudioEditor`, local checkout beside this repo) consumes the same fork branch as a submodule and **must pin the same commit**. Its test suite runs the exporter against `rive::File::import` and the checker, so a `.riv` format change surfaces there first. After §8 passes here:
+```bash
+cd ../airZStudioEditor && git -C rive-runtime fetch origin && git -C rive-runtime checkout <new commit> && flutter test
+```
+- Update the editor's pin statements (`CLAUDE.md`, `AGENTS.md`, `README`) and its `.gitmodules` branch.
+- If `rive::File::majorVersion` / `minorVersion` changed, the editor's writer must be bumped in the same change.
+- Host behaviour the editor preview mirrors lives in `airzscene-core/src/core.cpp`; when `rive_producer.cpp` changes host behaviour (slot gating, event reporting, focus/keyboard, nested default machine), say so in the commit message.
+- Runtime ≥ 0.1.359: the `FocusManager` lives on the artboard instance and `File::artboardAt()->instance()` does **not** create one — call `ensureFocusManager()` before relying on keyboard/text listeners. Playout (`rive_producer.cpp`) uses no keyboard or pointer listeners today, so nothing to do here until it does. Reported events carry `CustomProperty*` children; the editor's `bindings.json` lists them per controller.
+
 ---
 
-## 9. Committing to the parent
+## 9. Publishing — push the branch, bump both parents
 
-Both repos store LF and check out CRLF. Prove the commit will contain only real changes — four checks, all of which can fail:
+The parents no longer carry runtime files: each pins one submodule commit. Four checks, all of which can fail:
 
-0. **Blob-level proof (the decisive one).** After staging, every path under `rive-runtime/` in the parent index must carry the *same blob SHA* as upstream's tag, except the patched sources. This is exact — it sees through line endings, stat churn and renames — and takes seconds:
+1. **Guard-rail per file** (inside the submodule): the delta against the tag is exactly the expected set, and no line-ending noise hides in it:
    ```bash
-   git add -- rive-runtime ':(exclude)rive-runtime/tests/android_tests/.gradle' docs/RIVE_SYNC_PLAN_*.md
-   git ls-files -s -- rive-runtime > /tmp/parent_index.txt          # mode sha stage<TAB>path
-   git -C rive-runtime ls-tree -r runtime-v0.1.N > /tmp/upstream.txt  # mode type sha<TAB>path
-   python - <<'PY'
-   par = {l.split('\t',1)[1].rstrip('\n')[len('rive-runtime/'):]: l.split()[1] for l in open('/tmp/parent_index.txt', encoding='utf-8')}
-   up  = {l.split('\t',1)[1].rstrip('\n'): l.split()[2] for l in open('/tmp/upstream.txt', encoding='utf-8')}
-   print('DIFFER from upstream:', [p for p in up if p in par and par[p] != up[p]])   # expect exactly the patched sources
-   print('upstream-only:', [p for p in up if p not in par])                          # expect only parent-.gitignore'd paths (build/, .vscode/, */build/)
-   print('parent-only (non-deps):', [p for p in par if p not in up and not p.startswith('dependencies/') and '/.gradle/' not in p])  # expect CMakeLists.txt + 2 docs
-   PY
+   git diff runtime-v0.1.N..HEAD --name-only | grep -v '^dependencies/'          # patched sources, CMakeLists.txt, CUSTOM_PATCHES.md, UPDATING_RIVE.md — nothing else
+   diff <(git diff runtime-v0.1.N..HEAD --numstat) <(git diff runtime-v0.1.N..HEAD --ignore-cr-at-eol --numstat) && echo NO-CR-NOISE
    ```
-   2026-09 result: DIFFER = `src/animation/nested_state_machine.cpp`, `src/nested_artboard.cpp` only. Upstream-only = 23 paths under `build/`, `.vscode/`, `decoders/build/` — the **parent's** `.gitignore` hides them (premake/IDE files we never use; never tracked — expected, not a gap). Parent-only = our three files plus pre-existing `.gradle` junk.
-1. **Staged-set check.** Every staged file under `rive-runtime/` must be *either* changed upstream between the two tags, *or* one of ours (the patched sources, `CMakeLists.txt`, the two docs), *or* a vendored `dependencies/*` tree. Anything else is line-ending or stat noise leaking into the commit:
+   (Both repos store LF and check out CRLF; a file that shows a CR-only difference has mixed endings — normalise it to one style, then `git add --renormalize <file>`.)
+2. **Branch on the fork = local HEAD**, or the parents will pin a commit nobody can fetch:
    ```bash
-   git add -- rive-runtime ':(exclude)rive-runtime/tests/android_tests/.gradle' docs/RIVE_SYNC_PLAN_*.md
-   git -C rive-runtime diff --name-only <old-tag> <new-tag> | sed 's|^|rive-runtime/|' | sort > /tmp/up.txt
-   git diff --cached --name-only -- rive-runtime | sort > /tmp/staged.txt
-   comm -13 /tmp/up.txt /tmp/staged.txt | grep -v '^rive-runtime/dependencies/'     # expect ONLY our files
+   git push origin airz/merge-v0.1.N
+   [ "$(git ls-remote origin refs/heads/airz/merge-v0.1.N | cut -f1)" = "$(git rev-parse HEAD)" ] && echo PUSHED
    ```
-2. **Line-ending noise:** `--numstat` with and without `--ignore-cr-at-eol` must agree per file (a pure rename shows `0 0` in both — that is fine):
+3. **Bump AirPlayEngine** — the gitlink and the branch name in `.gitmodules`, one commit:
    ```bash
-   git diff --cached --no-renames --numstat -- rive-runtime > /tmp/raw; git diff --cached --no-renames --ignore-cr-at-eol --numstat -- rive-runtime > /tmp/norm; diff /tmp/raw /tmp/norm && echo NO-CR-NOISE
+   cd .. && git submodule set-branch --branch airz/merge-v0.1.N rive-runtime
+   git add rive-runtime .gitmodules && git commit -F <message-file>   # chore(rive): sync rive-runtime <old-tag> → <new-tag> (<n> upstream commits) … per-patch verdicts, pin/define changes, both tags, rollback tag
+   git push origin master
+   git submodule status            # commit must be the one you pushed in step 2
    ```
-   If a file differs, normalise it to a single line-ending style (mixed-ending files are stored as-is by git and pollute every future diff) — a small python rewrite, then `git add --renormalize <file>`.
-3. **Clean-filter spot check** — on a file upstream did **not** change (`LICENSE`, `src/math/mat2d.cpp`; verify with `git -C rive-runtime diff --quiet <old-tag> <new-tag> -- <file>`). Running it on a file upstream *did* change (e.g. `artboard.cpp`, 383 changed lines in 2026-09) prints DIFFERENT and proves nothing. The `--path` is essential — without it `hash-object` skips the clean filter:
+4. **Bump the editor to the same commit** (§8b) and prove the two parents agree — this is the invariant the handoff insists on:
    ```bash
-   f=rive-runtime/LICENSE; [ "$(git rev-parse HEAD:$f)" = "$(git hash-object --path=$f $f)" ] && echo SAME
+   [ "$(git -C rive-runtime rev-parse HEAD)" = "$(git -C ../airZStudioEditor/rive-runtime rev-parse HEAD)" ] && echo SAME-PIN
    ```
-Then commit and push:
-```bash
-git commit -F <message-file>   # chore(rive): sync rive-runtime <old-tag> → <new-tag> (<n> upstream commits) … — body: what upstream brought, per-patch verdicts, pin/define changes, both .rive_head values, rollback tag
-git push origin master
-```
-Update the sync log in `CUSTOM_PATCHES.md` and keep the rollback tag for a while. Never stage `tests/android_tests/.gradle/*` lock files (they churn on every Gradle touch and carry nothing).
+Update `CUSTOM_PATCHES.md` ("Currently at" + sync log) and keep the rollback tags for a while. A docs-only change on the branch still moves the commit, so it still needs both bumps.
 
 ---
 
 ## 10. Lessons log — what failed in the 2026-09 sync and how it was fixed
 
-Kept so the next sync does not rediscover them. Full command-level detail: `docs/RIVE_SYNC_PLAN_2026-09.md`.
+Kept so the next sync does not rediscover them. Full command-level detail: `docs/RIVE_SYNC_PLAN_2026-09.md`. Rows 1–3, 9, 13 and 14 date from the plain-file layout (the parent tracked 8.5k runtime files and an unregistered workbench clone did the merging, both retired the same day by the submodule conversion); their fixes are superseded by §2/§9, the failure modes are still instructive.
 
 | # | What happened | Root cause | Fix / rule now in this doc |
 |---|---|---|---|
@@ -269,7 +265,8 @@ Kept so the next sync does not rediscover them. Full command-level detail: `docs
 | 11 | Long bash heredocs containing Python or Markdown failed to parse in the agent tooling. | Quote-heavy content trips the command parser. | Write scripts/docs to a file first, then run/copy them. |
 | 12 | The sync took `.riv` layout patches P1–P3 on faith for a year. | Nobody had tested unmodified upstream. | Test-first policy (§3): drop uncertain patches, let §8 decide. Result: all three unnecessary. |
 | 13 | The documented `hash-object --path` spot check printed DIFFERENT right before the parent commit. | It was written against `artboard.cpp`, a file upstream changed — the check only means something on an upstream-unchanged file. | §9 now uses `LICENSE`/`mat2d.cpp` and, above all, the blob-level index-vs-tag proof (check 0), which found the parent equal to upstream except the two patched sources. |
-| 14 | 24 upstream-changed files showed a 1-line raw-vs-`--ignore-cr-at-eol` difference. | Stray carriage returns in upstream's own blobs (mixed-ending files are stored as-is). | Not ours to fix; check 0 proves the stored blobs equal upstream's. Only files that *differ from upstream* need line-ending attention. |
+| 14 | 24 upstream-changed files showed a 1-line raw-vs-`--ignore-cr-at-eol` difference. | Stray carriage returns in upstream's own blobs (mixed-ending files are stored as-is). | Not ours to fix; the blob-level proof showed the stored blobs equal upstream's. Only files that *differ from upstream* need line-ending attention. |
+| 15 | After the submodule conversion the handoff's first sync command (`git fetch upstream --tags` → `rebase --onto runtime-v0.1.N runtime-v0.1.359`) could not run: the checkout had no `upstream` remote and none of the `runtime-v*` tags. | Tags are not pushed with a branch; the fork clone only had `origin`. | Remote added and tags fetched 2026-09-05; §2 step 2 makes it a checked prerequisite. |
 
 Methodology in one sentence: **every claim gets a check that can fail** — the pin table has a symbol scan, the rebase has a guard-rail diff, the build has the obj histogram, the patch list has the seven on-air tests, the commit has `hash-object --path`.
 
@@ -284,3 +281,5 @@ Methodology in one sentence: **every claim gets a check that can fail** — the 
 - **"Add a `m_layoutData == nullptr` guard in `calculateLayoutInternal`."** Upstream now has an equivalent (`if (m_style == nullptr || m_layoutData == nullptr)`); do not re-add ours.
 - **Luau pin `rive_0_731`.** Now `rive_0_734`; the pin table (§4) is the single place versions are recorded.
 - **"`WITH_RIVE_SCRIPTING` alone enables scripting."** Since upstream split the define, `WITH_RIVE_SCRIPTING_LUAU` is also required (§5) or scripting is silently inert.
+- **"`rive-runtime/` is tracked by the parent as plain files; an unregistered nested workbench clone does the merging; `dependencies/*` are the parent's job."** True for a few hours on 2026-09-05. Superseded the same day by the submodule on the `unspokenlanguage/rive-runtime` fork with the dependency trees on the branch (§1). The workbench's `.git` is backed up at AirPlayEngine `.git/rive-workbench-backup` (133 MB) until someone deletes it.
+- **"Blob-level parent-index-vs-tag proof and the `hash-object --path` spot check before the parent commit."** Only meaningful when the parent indexed runtime files; the parent now stores one gitlink. The equivalent proof is §9 check 1 (guard-rail per file inside the submodule) plus check 2 (fork branch = local HEAD).
