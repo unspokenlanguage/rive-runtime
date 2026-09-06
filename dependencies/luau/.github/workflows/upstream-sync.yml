@@ -1,0 +1,96 @@
+name: Sync with upstream
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'  # Weekly, Monday 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Fork branch to rebase'
+        default: 'rive_0_35'
+        required: true
+      upstream_ref:
+        description: 'Upstream ref to rebase onto (branch or tag)'
+        default: 'master'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    env:
+      BASE_BRANCH: ${{ github.event.inputs.base_branch || 'rive_0_35' }}
+      UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'master' }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base_branch || 'rive_0_35' }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "rive-luau-sync"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/luau-lang/luau.git
+          git fetch upstream "$UPSTREAM_REF"
+
+      - name: Compute working branch
+        id: branch
+        run: |
+          WEEK="$(date -u +%Y-W%V)"
+          echo "name=auto/upstream-rebase-${WEEK}" >> "$GITHUB_OUTPUT"
+
+      - name: Attempt rebase
+        id: rebase
+        run: |
+          git checkout -B "${{ steps.branch.outputs.name }}"
+          if git rebase "upstream/$UPSTREAM_REF"; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            CONFLICTS="$(git diff --name-only --diff-filter=U || true)"
+            git rebase --abort || true
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Rebase conflicts"
+              echo ""
+              echo "Rebasing \`$BASE_BRANCH\` onto \`upstream/$UPSTREAM_REF\` failed."
+              echo ""
+              echo "Conflicting files:"
+              echo ""
+              echo '```'
+              echo "$CONFLICTS"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Push branch and open PR
+        if: steps.rebase.outputs.clean == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet "origin/$BASE_BRANCH" "${{ steps.branch.outputs.name }}"; then
+            echo "No new upstream commits since base — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git push --force-with-lease origin "${{ steps.branch.outputs.name }}"
+          if gh pr view "${{ steps.branch.outputs.name }}" >/dev/null 2>&1; then
+            gh pr edit "${{ steps.branch.outputs.name }}" \
+              --body "Automated rebase of \`$BASE_BRANCH\` onto \`upstream/$UPSTREAM_REF\`. Clean. Verify CI before merging."
+          else
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "${{ steps.branch.outputs.name }}" \
+              --title "Sync $BASE_BRANCH with upstream/$UPSTREAM_REF" \
+              --body  "Automated rebase of \`$BASE_BRANCH\` onto \`upstream/$UPSTREAM_REF\`. Clean. Verify CI before merging."
+          fi
+
+      - name: Fail on conflicts
+        if: steps.rebase.outputs.clean == 'false'
+        run: exit 1
