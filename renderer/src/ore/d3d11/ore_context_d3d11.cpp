@@ -1549,12 +1549,23 @@ void ContextD3D11::endFrame() {}
 
 rcp<Buffer> ContextD3D11::makeBuffer(const BufferDesc& desc)
 {
-    return d3d11MakeBuffer(desc);
+    auto buffer = d3d11MakeBuffer(desc);
+    if (buffer != nullptr)
+    {
+        d3d11Stats().buffersCreated++;
+        d3d11Stats().buffersCreatedBytes += desc.size;
+    }
+    return buffer;
 }
 
 rcp<Texture> ContextD3D11::makeTexture(const TextureDesc& desc)
 {
-    return d3d11MakeTexture(desc);
+    auto texture = d3d11MakeTexture(desc);
+    if (texture != nullptr)
+    {
+        d3d11Stats().texturesCreated++;
+    }
+    return texture;
 }
 
 rcp<TextureView> ContextD3D11::makeTextureView(const TextureViewDesc& desc)
@@ -1594,6 +1605,7 @@ std::unique_ptr<RenderPass> ContextD3D11::beginRenderPass(
     std::string* outError)
 {
     finishActiveRenderPass();
+    d3d11Stats().renderPasses++;
     return d3d11BeginRenderPass(desc, outError);
 }
 

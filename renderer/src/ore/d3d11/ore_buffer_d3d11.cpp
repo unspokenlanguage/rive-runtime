@@ -26,6 +26,8 @@ void BufferD3D11::update(const void* data, uint32_t size, uint32_t offset)
     // the D3D11 spec when overlapping with in-flight reads — the debug
     // layer flags it. NO_OVERWRITE is only valid for append-style
     // suballocation patterns Ore doesn't currently expose.
+    d3d11Stats().bufferUpdates++;
+    d3d11Stats().bufferUpdateBytes += size;
     D3D11_MAPPED_SUBRESOURCE mapped{};
     [[maybe_unused]] HRESULT hr = m_d3d11Context->Map(m_d3d11Buffer.Get(),
                                                       0,

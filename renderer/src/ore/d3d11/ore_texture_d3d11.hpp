@@ -1,5 +1,6 @@
 #pragma once
 #include "rive/renderer/ore/ore_texture.hpp"
+#include "rive/renderer/ore/ore_d3d11_stats.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 
@@ -11,7 +12,7 @@ class TextureD3D11 : public LITE_RTTI_OVERRIDE(Texture, TextureD3D11)
 {
 public:
     TextureD3D11(const TextureDesc& desc) : lite_rtti_override(desc) {}
-    ~TextureD3D11() override = default; // ComPtr released automatically
+    ~TextureD3D11() override { d3d11Stats().texturesDestroyed++; } // ComPtr released automatically
     void upload(const TextureDataDesc& data) override;
 
 private:

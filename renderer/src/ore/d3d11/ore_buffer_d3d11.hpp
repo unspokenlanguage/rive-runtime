@@ -1,5 +1,6 @@
 #pragma once
 #include "rive/renderer/ore/ore_buffer.hpp"
+#include "rive/renderer/ore/ore_d3d11_stats.hpp"
 #include <d3d11.h>
 #include <wrl/client.h>
 
@@ -13,7 +14,7 @@ public:
     BufferD3D11(uint32_t size, BufferUsage usage) :
         lite_rtti_override(size, usage)
     {}
-    ~BufferD3D11() override = default; // ComPtr released automatically
+    ~BufferD3D11() override { d3d11Stats().buffersDestroyed++; } // ComPtr released automatically
     void update(const void* data, uint32_t size, uint32_t offset) override;
 
 private:
