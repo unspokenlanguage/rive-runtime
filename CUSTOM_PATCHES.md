@@ -113,14 +113,22 @@ What we change in `rive-runtime/` relative to upstream (`https://github.com/rive
 
 ---
 
-## Patch 9: D3D11 Ore compiled-shader cache (memory + disk)
-* **File:** `renderer/src/ore/d3d11/ore_shader_module_d3d11.cpp`
-* **Added:** 2026-09-18.
-* **Symptom:** every load of a scripted 3D layer spent ~750–1,150 ms in `D3DCompile` (optimisation level 3, the editor's full PBR shader), because every render context builds its own shader modules and nothing was reused — in the same process or across restarts. That landed on the first on-air frame of any template not armed in advance, and on every discrete edit in the editor's host.
-* **Resolution:** the DXBC is a pure function of (HLSL source, entry point, target, compile flags, `D3D_COMPILER_VERSION`), so it is cached under that key: two independent 64-bit hashes over all inputs (the file name carries both). Memory level: process-wide, bounded at 64 MB, cleared when exceeded. Disk level: one `.dxbc` per module in `AIRZ_ORE_SHADER_CACHE` (a path) or `%LOCALAPPDATA%irZStudio\ore-shader-cache`; accepted only if it is a DXBC container whose declared size matches; written to a temp file and renamed into place. `AIRZ_ORE_SHADER_CACHE=0` disables both levels.
-* **Measured** (materials sample, RTX A4500, fresh process each): cache off — 2 compiles, 750–800 ms, first on-air frame 862–918 ms; first ever load with the cache — 1,283 ms, then written; second load in the same process — 132 ms (2 from memory); cold start with the disk filled — 148 ms (2 from disk). Picture unchanged: 99.90% of pixels within 8/255 of the editor's reference, as before.
-* **On sync:** re-apply around upstream's `D3DCompile` call. If upstream adds a shader cache or a host hook to supply bytecode, prefer it and move this to *Retired*.
-* **Consumers:** both parents get it through the submodule pin — the editor's preview and exporter tests compile the same shaders and share the same disk directory on one machine (identical key, so identical bytes).
+## Patch 9: Compiled-shader cache for every runtime `D3DCompile` (memory + disk)
+* **Files:** `renderer/include/rive/renderer/d3d/airz_bytecode_cache.hpp` (new, header-only), `renderer/src/d3d/pipeline_manager.cpp` (`compile_shader_to_blob`), `renderer/src/ore/d3d11/ore_shader_module_d3d11.cpp` (`ensureD3DShadersImpl`)
+* **Added:** 2026-09-18 (Ore modules first, the 2D renderer the same day).
+* **Symptom:** the runtime compiles HLSL at runtime in two places and caches only per render context, so every new producer — every PLAY — recompiled: the **2D renderer's draw-shader variants** (the ubershader synchronously on the first flush: ~280 ms of the soccer scene's 304 ms first frame, 12 compiles; every Rive file pays this, 3D or not) and **Ore's shader modules** (the editor's full PBR shader, ~750–1,150 ms). It landed on the first on-air frame of any template not armed in advance, and on every discrete edit in the editor's host.
+* **Resolution:** DXBC is a pure function of (source, entry, target, flags, `D3D_COMPILER_VERSION`), cached under two independent 64-bit hashes of all of them. Memory: process-wide, 64 MB bound. Disk: one `.dxbc` per shader in `AIRZ_ORE_SHADER_CACHE` (a path) or `%LOCALAPPDATA%irZStudio\ore-shader-cache`, accepted only as a DXBC container of the declared size, written temp-then-rename (the pipeline manager compiles on worker threads). `AIRZ_ORE_SHADER_CACHE=0` disables both. Header-only so neither parent's CMake needs a new source file. Compile and hit counts go to the Patch 8 counters.
+* **Measured** (RTX A4500, fresh process each):
+
+  | Scene | Cache off | Cold start, disk cache filled |
+  |---|---|---|
+  | Soccer analysis (2D) | 304 ms first frame, 12 compiles (546 ms) | 71–81 ms, 12 from disk |
+  | Materials sample (3D) | 1,044–1,095 ms, 10 compiles (1,113–1,161 ms) | 101–161 ms, 10 from disk |
+
+  Pictures unchanged: materials 99.90% within 8/255 of the editor reference, soccer identical to its readback reference.
+* **What remains of the first frame** (measured with temporary timers, 2026-09-18): replay 10–15 ms, image decoding 6–15 ms (the recording factory decodes each image once at import for its size and the replay decodes it again — a minor waste), and **48–117 ms in the device context's `Flush` + keyed-mutex release**: the driver's first submission on a device that is new per producer. Not addressed here; a device shared across producers is the candidate.
+* **On sync:** re-apply around both `D3DCompile` calls. If upstream adds a shader cache or a host hook to supply bytecode, prefer it and move this to *Retired*.
+* **Consumers:** both parents through the submodule pin; on one machine they share the disk directory (identical key, identical bytes).
 
 ---
 
@@ -382,4 +390,4 @@ Patches upstream now covers, or that turned out to be no-ops. Retired after the 
 |---|---|---|---|
 | 2026-09-05 | `runtime-v0.1.230` (`4a10679b`) → `runtime-v0.1.359` (`621f2a2e`), 129 upstream commits | `9e498b2635…` → `a87af1c977…` | Git 3-way rebase in the nested workbench (`UPDATING_RIVE.md` §1). Kept P5, P6, P7. **P1/P2/P3 retired** — dropped test-first, then all 7 on-air checks (`UPDATING_RIVE.md` §8) passed on unmodified upstream 2026-09-05. Yoga → `v2_0_1_3_grid` (10 grid symbols required), `rive_yoga` → C++20. Luau → `rive_0_734`. HarfBuzz stays `10.1.0` (only Apple-only `hb_ct_*` missing). Added `WITH_RIVE_SCRIPTING_LUAU`; excluded `src/wasm`. Full record: `docs/RIVE_SYNC_PLAN_2026-09.md`. |
 | 2026-09-05 | layout change, same runtime: plain-file tree → **submodule** on fork branch `airz/merge-v0.1.359` (`3eb17fe3`, dependency trees vendored on the branch in `4e9d14ee`); editor pinned to the same commit | unchanged | Content byte-identical to the tracked tree; rollback tag `rive-pre-submodule-2026-09-05`. Docs reconciled the same day (`upstream` remote + tags were missing from the checkout; §2 step 2, §8b, §9 rewritten for the two-parent layout). |
-| 2026-09-18 | same runtime (`runtime-v0.1.359`) | unchanged | Patch 8 (D3D11 Ore counters, `fa2872d2`) recorded; **Patch 9** added — compiled-shader cache in memory and on disk: first on-air frame of the materials sample 862–918 ms → 132–148 ms, picture unchanged. |
+| 2026-09-18 | same runtime (`runtime-v0.1.359`) | unchanged | Patch 8 (D3D11 Ore counters, `fa2872d2`) recorded; **Patch 9** added — compiled-shader cache (memory + disk) for the 2D renderer's draw shaders and Ore's modules: first on-air frame soccer 304 → 71–81 ms, materials 1,095 → 101–161 ms, pictures unchanged. |

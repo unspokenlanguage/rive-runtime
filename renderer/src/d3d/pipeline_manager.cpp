@@ -1,6 +1,7 @@
 /*
  * Copyright 2025 Rive
  */
+#include "rive/renderer/d3d/airz_bytecode_cache.hpp"
 #include "rive/renderer/d3d/pipeline_manager.hpp"
 #include "rive/renderer/d3d/d3d_constants.hpp"
 #include "generated/shaders/constants.glsl.hpp"
@@ -222,7 +223,28 @@ ComPtr<ID3DBlob> compile_shader_to_blob(DrawType drawType,
     UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
 #endif
 
-    HRESULT hr = D3DCompile(sourceStr.c_str(),
+    // airz: every render context compiles its own draw-shader variants — the
+    // ubershader synchronously on the first flush, 120–180 ms per new producer.
+    // Reuse the DXBC across contexts and runs (airz_bytecode_cache.hpp).
+    auto& cache = rive::airz::BytecodeCache::get();
+    const auto key = rive::airz::makeShaderKey(sourceStr.c_str(),
+                                               sourceStr.length(),
+                                               "main",
+                                               target,
+                                               flags);
+    if (rive::airz::Bytecode cached = cache.find(key))
+    {
+        if (SUCCEEDED(D3DCreateBlob(cached->size(), &blob)))
+        {
+            memcpy(blob->GetBufferPointer(), cached->data(), cached->size());
+            return blob;
+        }
+    }
+
+    HRESULT hr;
+    {
+        rive::airz::CompileTimer timer;
+        hr = D3DCompile(sourceStr.c_str(),
                             sourceStr.length(),
                             nullptr,
                             nullptr,
@@ -233,6 +255,7 @@ ComPtr<ID3DBlob> compile_shader_to_blob(DrawType drawType,
                             0,
                             &blob,
                             &errors);
+    }
     if (errors && errors->GetBufferPointer())
     {
         fprintf(stderr, "Errors or warnings compiling shader.\n");
@@ -253,6 +276,7 @@ ComPtr<ID3DBlob> compile_shader_to_blob(DrawType drawType,
         fprintf(stderr, "Failed to compile shader.\n");
         abort();
     }
+    cache.insert(key, blob->GetBufferPointer(), blob->GetBufferSize());
     return blob;
 }
 }; // namespace rive::gpu::d3d_utils
