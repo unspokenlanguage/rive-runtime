@@ -103,6 +103,8 @@ static TextureFormat lua_totextureformat(lua_State* L, const char* s)
         return TextureFormat::bgra8unorm;
     if (strcmp(s, "rgba16float") == 0)
         return TextureFormat::rgba16float;
+    if (strcmp(s, "rgba16unorm") == 0) // AIRZ (Patch 11)
+        return TextureFormat::rgba16unorm;
     if (strcmp(s, "rg16float") == 0)
         return TextureFormat::rg16float;
     if (strcmp(s, "r16float") == 0)
@@ -155,6 +157,8 @@ static const char* lua_totextureformatstring(TextureFormat fmt)
             return "bgra8unorm";
         case TextureFormat::rgba16float:
             return "rgba16float";
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
+            return "rgba16unorm";
         case TextureFormat::rg16float:
             return "rg16float";
         case TextureFormat::r16float:
@@ -2923,15 +2927,18 @@ int gpucanvas_beginrenderpass(lua_State* L)
 rcp<gpu::RenderCanvas> rive::allocScriptRenderCanvas(gpu::RenderContext* rc,
                                                      ScriptingContext* ctx,
                                                      uint32_t width,
-                                                     uint32_t height)
+                                                     uint32_t height,
+                                                     gpu::CanvasFormat format)
 {
     assert(rc != nullptr);
     assert(ctx != nullptr);
     if (ctx->deferredCanvasHost() != nullptr || ctx->renderContextIsLateBound())
     {
-        return rc->makeDeferredRenderCanvas(width, height);
+        // AIRZ (Patch 11): kept as asked; the replay device backs it (a
+        // 16-bit canvas needs a backend with supportsCanvasFormat).
+        return rc->makeDeferredRenderCanvas(width, height, format);
     }
-    return rc->makeRenderCanvas(width, height);
+    return rc->makeRenderCanvas(width, height, format);
 }
 
 // The device a canvas should allocate against right now, which is not
@@ -2973,7 +2980,8 @@ static void gpucanvas_satisfyPending(lua_State* L, ScriptedGPUCanvas* self)
     // Allocate and wrap the new backing BEFORE touching the existing
     // canvas/view/imageRef. If either step throws (via luaL_error), the
     // canvas keeps its previous, still-valid backing.
-    auto newCanvas = allocScriptRenderCanvas(renderCtx, scriptingCtx, w, h);
+    auto newCanvas =
+        allocScriptRenderCanvas(renderCtx, scriptingCtx, w, h, self->format);
     if (!newCanvas)
     {
         luaL_error(L, "GPUCanvas:resize() failed to create RenderCanvas");
@@ -3142,7 +3150,8 @@ static int gpucanvashandle_index(lua_State* L)
             return 1;
         case (int)LuaAtoms::format:
             // Realized canvas reports its texture format. Deferred canvas
-            // reports the format makeRenderCanvas always allocates.
+            // reports the format it will be allocated in (AIRZ Patch 11: the
+            // one the script asked for).
             if (self->oreColorView && self->oreColorView->texture())
                 lua_pushstring(L,
                                lua_totextureformatstring(
@@ -3150,7 +3159,10 @@ static int gpucanvashandle_index(lua_State* L)
             else
                 lua_pushstring(
                     L,
-                    lua_totextureformatstring(TextureFormat::rgba8unorm));
+                    lua_totextureformatstring(
+                        self->format == gpu::CanvasFormat::rgba16unorm
+                            ? TextureFormat::rgba16unorm
+                            : TextureFormat::rgba8unorm));
             return 1;
     }
     luaL_error(L, "'%s' is not a valid index of GPUCanvas", key);

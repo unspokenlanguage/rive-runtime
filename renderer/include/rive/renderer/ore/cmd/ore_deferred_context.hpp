@@ -251,15 +251,19 @@ public:
     // late bound backend turns out to override it.
     static constexpr TextureFormat kUnboundCanvasFormat =
         TextureFormat::rgba8unorm;
-    rcp<TextureView> makeReservedCanvasView(ResourceHandle id,
-                                            uint32_t generation,
-                                            uint32_t width,
-                                            uint32_t height)
+    // AIRZ (Patch 11): `format` is a 16-bit canvas's own format; unset, the
+    // replay device's canvas format as before.
+    rcp<TextureView> makeReservedCanvasView(
+        ResourceHandle id,
+        uint32_t generation,
+        uint32_t width,
+        uint32_t height,
+        const TextureFormat* format = nullptr)
     {
         TextureDesc texDesc{};
         texDesc.width = width;
         texDesc.height = height;
-        texDesc.format = m_caps.canvasTargetFormat;
+        texDesc.format = format ? *format : m_caps.canvasTargetFormat;
         texDesc.type = TextureType::texture2D;
         texDesc.renderTarget = true;
         texDesc.numMipmaps = 1;
@@ -297,10 +301,15 @@ public:
                              a.generation,
                              canvasId,
                              WrapCanvasViewMode::colorView);
-        return makeReservedCanvasView(a.id,
-                                      a.generation,
-                                      c->width(),
-                                      c->height());
+        // AIRZ (Patch 11): the proxy has the canvas's format, or pipelines
+        // built for a 16-bit canvas fail the compat check at record time.
+        const TextureFormat f16 = TextureFormat::rgba16unorm;
+        return makeReservedCanvasView(
+            a.id,
+            a.generation,
+            c->width(),
+            c->height(),
+            c->format() == gpu::CanvasFormat::rgba16unorm ? &f16 : nullptr);
     }
 
     // Same reserve as wrapCanvasTexture but tagged sampleView so the consumer

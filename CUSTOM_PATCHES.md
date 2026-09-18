@@ -142,6 +142,19 @@ What we change in `rive-runtime/` relative to upstream (`https://github.com/rive
 * **On sync:** re-apply in `render_context_d3d_impl.cpp` (format switches) and `allocateGradient`. Atomic mode (packed 32-bit colour) is not covered: a 16-bit target there needs shader work.
 * **Consumers:** CasparFork on 16-bit channels. The editor is unaffected (option off, 8-bit targets).
 
+## Patch 11: 16-bit script canvases (`rgba16unorm`)
+* **Files:** `renderer/include/rive/renderer/render_canvas.hpp` (`gpu::CanvasFormat`, `RenderCanvas::format()`/`setFormat()`), `render_context_impl.hpp` (`supportsCanvasFormat`, format on `makeRenderCanvas`/`makeDeferredRenderCanvas`), `render_context.hpp`/`.cpp` (three-argument overloads), `d3d11/render_context_d3d_impl.hpp`/`.cpp` (`ensureCanvasBacking` allocates the canvas's format; `supportsCanvasFormat` true), `ore/ore_types.hpp` (`TextureFormat::rgba16unorm`, appended last), the Ore backends' format tables (`ore_context_d3d11.cpp`, `_d3d12`, `_vulkan`, `.mm` Metal, GL `ore_context_gl.cpp`/`ore_texture_gl.cpp` under `#ifdef GL_RGBA16`, WebGPU refuses it), `ore/cmd/ore_deferred_context.hpp` (the recorded proxy view of a canvas has the canvas's format), `include/rive/lua/rive_lua_libs.hpp`, `src/lua/renderer/lua_gpu.cpp`, `src/lua/lua_scripted_context.cpp` (`context:gpuCanvas({ format = ... })`, `"rgba16unorm"` in texture-format strings, `canvas.format`).
+* **Added:** 2026-09-18 (CasparFork `docs/plans/P2B_10BIT_RIVE.md`, step R3).
+* **Why:** a 3D layer renders in `rgba16float` internally but resolves into its script canvas, which was always `rgba8unorm`: every 3D picture reached a 16-bit channel at 8 bits.
+* **Resolution:**
+  - A canvas carries a colour format from creation, so a recording made before any device exists knows it and the replay backs it in that format (replay backs the same canvas object).
+  - `context:gpuCanvas({ width, height, format = 'rgba16unorm' })` asks for it; pipelines drawing into it declare `rgba16unorm` colour targets. A device that cannot allocate it (`supportsCanvasFormat` false: every backend but D3D11 for now) gives `rgba8unorm` on the immediate path, and `canvas.format` reports what was made. On the deferred path the request stands and the replay device must support it.
+  - `context:canvas()` (2D drawing into a canvas) is unchanged: Rive's 2D renderer draws into 16-bit targets only in raster-ordering mode (Patch 10).
+  - The two-argument `makeRenderCanvas`/`makeDeferredRenderCanvas` stay as they were (wasm modules import them by mangled name).
+* **Measured** (RTX A4500, CasparFork `canvas16_test`): Ore clears a canvas to a value between two 8-bit levels, the 2D renderer draws it into a 16-bit target through the deferred path. An `rgba16unorm` canvas arrives within 0.002 of an 8-bit level at 64.3, 128.4, 200.6 and 250.2; `rgba8unorm` rounds to the nearest level. With Rive's dither on (the default) both read 0.14 of a level high at that pixel: the dither is sized for 8-bit targets, so a 16-bit host turns it off (`FrameDescriptor::ditherMode = none`).
+* **On sync:** re-apply the format tables and the deferred proxy format; keep `rgba16unorm` last in `TextureFormat`.
+* **Consumers:** CasparFork (16-bit channels). The editor: its 3D script asks for `rgba16unorm` when the host says the channel is 16-bit (step D1); nothing changes until it does.
+
 ---
 
 ## Retired patches — resolved, kept for the record

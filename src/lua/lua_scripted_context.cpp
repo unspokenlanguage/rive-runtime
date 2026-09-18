@@ -509,12 +509,16 @@ static int context_namecall(lua_State* L)
             }
             case (int)LuaAtoms::gpuCanvas:
             {
-                // context:gpuCanvas({ width = w, height = h })
+                // context:gpuCanvas({ width = w, height = h,
+                //                    format = 'rgba8unorm' | 'rgba16unorm' })
                 // Descriptor is optional; missing or zero width/height yields
                 // a deferred canvas with no backing texture. Use :resize() to
-                // allocate once the real layout size is known.
+                // allocate once the real layout size is known. AIRZ (Patch
+                // 11): `format` asks for a 16-bit canvas; a device that cannot
+                // make one gives rgba8unorm, and canvas.format says which.
                 uint32_t gw = 0;
                 uint32_t gh = 0;
+                gpu::CanvasFormat gfmt = gpu::CanvasFormat::rgba8unorm;
                 if (!lua_isnoneornil(L, 2))
                 {
                     luaL_checktype(L, 2, LUA_TTABLE);
@@ -525,6 +529,18 @@ static int context_namecall(lua_State* L)
                     lua_getfield(L, 2, "height");
                     if (!lua_isnil(L, -1))
                         gh = (uint32_t)luaL_checknumber(L, -1);
+                    lua_pop(L, 1);
+                    lua_getfield(L, 2, "format");
+                    if (!lua_isnil(L, -1))
+                    {
+                        const char* f = luaL_checkstring(L, -1);
+                        if (strcmp(f, "rgba16unorm") == 0)
+                            gfmt = gpu::CanvasFormat::rgba16unorm;
+                        else if (strcmp(f, "rgba8unorm") != 0)
+                            luaL_error(L,
+                                       "context:gpuCanvas(): format must be "
+                                       "'rgba8unorm' or 'rgba16unorm'");
+                    }
                     lua_pop(L, 1);
                 }
 #if !defined(RIVE_CANVAS) || !defined(RIVE_ORE)
@@ -547,6 +563,7 @@ static int context_namecall(lua_State* L)
                     auto* handle = lua_newrive<ScriptedGPUCanvas>(L);
                     handle->m_L = L;
                     handle->renderCtx = nullptr;
+                    handle->format = gfmt; // AIRZ (Patch 11)
                     return 1;
                 }
                 auto* gpuRenderCtx = static_cast<gpu::RenderContext*>(
@@ -554,6 +571,7 @@ static int context_namecall(lua_State* L)
                 auto* handle = lua_newrive<ScriptedGPUCanvas>(L);
                 handle->m_L = L;
                 handle->renderCtx = gpuRenderCtx;
+                handle->format = gfmt; // AIRZ (Patch 11)
 
                 // The documented size-less contract: no descriptor means no
                 // backing texture, so nothing here touches a device. Checked
@@ -592,7 +610,8 @@ static int context_namecall(lua_State* L)
                 auto canvas = allocScriptRenderCanvas(gpuRenderCtx,
                                                       gpuScriptingCtx,
                                                       gw,
-                                                      gh);
+                                                      gh,
+                                                      gfmt);
                 if (!canvas)
                 {
                     luaL_error(

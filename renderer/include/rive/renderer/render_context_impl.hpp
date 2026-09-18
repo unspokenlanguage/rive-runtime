@@ -91,16 +91,32 @@ public:
     // A canvas nothing has allocated for yet. The recording only needs the
     // image identity it refers to, so this touches no device and whichever
     // context replays owns the pixels.
-    rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height)
+    rcp<RenderCanvas> makeDeferredRenderCanvas(
+        uint32_t width,
+        uint32_t height,
+        CanvasFormat format = CanvasFormat::rgba8unorm)
     {
-        return make_rcp<RenderCanvas>(width, height);
+        return make_rcp<RenderCanvas>(width, height, format);
+    }
+
+    // AIRZ (Patch 11): can ensureCanvasBacking allocate this format? A
+    // canvas asking for one it cannot gets rgba8unorm.
+    virtual bool supportsCanvasFormat(CanvasFormat format) const
+    {
+        return format == CanvasFormat::rgba8unorm;
     }
 
     // Creates a RenderCanvas: a GPU texture usable as both a render target
     // and a render image. Returns nullptr if not supported by this backend.
-    rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height)
+    rcp<RenderCanvas> makeRenderCanvas(
+        uint32_t width,
+        uint32_t height,
+        CanvasFormat format = CanvasFormat::rgba8unorm)
     {
-        rcp<RenderCanvas> canvas = makeDeferredRenderCanvas(width, height);
+        if (!supportsCanvasFormat(format))
+            format = CanvasFormat::rgba8unorm;
+        rcp<RenderCanvas> canvas =
+            makeDeferredRenderCanvas(width, height, format);
         ensureCanvasBacking(canvas.get());
         return canvas->isBacked() ? canvas : nullptr;
     }

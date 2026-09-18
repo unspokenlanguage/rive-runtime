@@ -1168,7 +1168,11 @@ void RenderContextD3DImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
     }
 
     uint32_t width = canvas->width(), height = canvas->height();
-    auto texture = makeSimple2DTexture(DXGI_FORMAT_R8G8B8A8_UNORM,
+    // AIRZ (Patch 11): the canvas's format.
+    auto texture = makeSimple2DTexture(canvas->format() ==
+                                               gpu::CanvasFormat::rgba16unorm
+                                           ? DXGI_FORMAT_R16G16B16A16_UNORM
+                                           : DXGI_FORMAT_R8G8B8A8_UNORM,
                                        width,
                                        height,
                                        1,

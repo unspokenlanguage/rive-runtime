@@ -71,6 +71,12 @@ static D3D11FormatInfo oreFormatInfo(TextureFormat fmt)
                     DXGI_FORMAT_B8G8R8A8_UNORM,
                     DXGI_FORMAT_UNKNOWN,
                     false};
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
+            return {DXGI_FORMAT_R16G16B16A16_UNORM,
+                    DXGI_FORMAT_R16G16B16A16_UNORM,
+                    DXGI_FORMAT_R16G16B16A16_UNORM,
+                    DXGI_FORMAT_UNKNOWN,
+                    false};
         case TextureFormat::rgba16float:
             return {DXGI_FORMAT_R16G16B16A16_FLOAT,
                     DXGI_FORMAT_R16G16B16A16_FLOAT,
@@ -1365,6 +1371,9 @@ rcp<TextureView> ContextD3D11::d3d11WrapCanvasTexture(gpu::RenderCanvas* canvas)
         case DXGI_FORMAT_R16G16B16A16_FLOAT:
             oreFormat = TextureFormat::rgba16float;
             break;
+        case DXGI_FORMAT_R16G16B16A16_UNORM: // AIRZ (Patch 11)
+            oreFormat = TextureFormat::rgba16unorm;
+            break;
         case DXGI_FORMAT_R10G10B10A2_UNORM:
             oreFormat = TextureFormat::rgb10a2unorm;
             break;
@@ -1443,6 +1452,9 @@ rcp<TextureView> ContextD3D11::d3d11WrapRiveTexture(gpu::Texture* gpuTex,
             break;
         case DXGI_FORMAT_B8G8R8A8_UNORM:
             oreFormat = TextureFormat::bgra8unorm;
+            break;
+        case DXGI_FORMAT_R16G16B16A16_UNORM: // AIRZ (Patch 11)
+            oreFormat = TextureFormat::rgba16unorm;
             break;
         default:
             oreFormat = TextureFormat::rgba8unorm;

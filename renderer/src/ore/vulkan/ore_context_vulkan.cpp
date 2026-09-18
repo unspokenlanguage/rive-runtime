@@ -119,6 +119,8 @@ static VkFormat oreFormatToVkLocal(TextureFormat fmt)
             return VK_FORMAT_R8G8B8A8_SNORM;
         case TextureFormat::bgra8unorm:
             return VK_FORMAT_B8G8R8A8_UNORM;
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
+            return VK_FORMAT_R16G16B16A16_UNORM;
         case TextureFormat::rgba16float:
             return VK_FORMAT_R16G16B16A16_SFLOAT;
         case TextureFormat::rg16float:
@@ -1625,6 +1627,9 @@ rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
             break;
         case VK_FORMAT_R16G16B16A16_SFLOAT:
             oreFormat = TextureFormat::rgba16float;
+            break;
+        case VK_FORMAT_R16G16B16A16_UNORM: // AIRZ (Patch 11)
+            oreFormat = TextureFormat::rgba16unorm;
             break;
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
             oreFormat = TextureFormat::rgb10a2unorm;

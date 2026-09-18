@@ -210,6 +210,12 @@ public:
 
 #ifdef RIVE_CANVAS
     void ensureCanvasBacking(gpu::RenderCanvas* canvas) override;
+    // AIRZ (Patch 11): both formats; R16G16B16A16_UNORM render targets and
+    // shader resources need nothing beyond feature level 10.
+    bool supportsCanvasFormat(gpu::CanvasFormat) const override
+    {
+        return true;
+    }
 
     std::unique_ptr<rive::ore::Context> makeOreContext() override;
 #endif

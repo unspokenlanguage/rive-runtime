@@ -523,6 +523,7 @@ class TextureView;
 namespace gpu
 {
 class RenderCanvas;
+enum class CanvasFormat : uint8_t; // AIRZ (Patch 11), render_canvas.hpp
 }
 #endif
 
@@ -607,6 +608,7 @@ namespace gpu
 {
 class RenderCanvas;
 class RenderContext;
+enum class CanvasFormat : uint8_t; // AIRZ (Patch 11), render_canvas.hpp
 } // namespace gpu
 
 // Forward-declare RiveRenderer so canvas handles can store a raw pointer to the
@@ -817,6 +819,9 @@ public:
     lua_State* m_L = nullptr;
     int m_imageRef = LUA_NOREF;
     gpu::RenderContext* renderCtx = nullptr; // needed for resize()
+    // AIRZ (Patch 11): the format the script asked for ({ format = ... }),
+    // kept for resize().
+    gpu::CanvasFormat format = gpu::CanvasFormat{}; // rgba8unorm
     // Size a resize() asked for while no device existed. Web attaches one per
     // render texture after layout has already run, and a generator resizes
     // once, so the request is held here and honoured on the first access after
@@ -1809,10 +1814,12 @@ public:
 // Allocates a script canvas backing, deferring when a session is recording
 // or the device was late bound, since either way the replay worker owns the
 // texture.
-rcp<gpu::RenderCanvas> allocScriptRenderCanvas(gpu::RenderContext* rc,
-                                               ScriptingContext* ctx,
-                                               uint32_t width,
-                                               uint32_t height);
+rcp<gpu::RenderCanvas> allocScriptRenderCanvas(
+    gpu::RenderContext* rc,
+    ScriptingContext* ctx,
+    uint32_t width,
+    uint32_t height,
+    gpu::CanvasFormat format = gpu::CanvasFormat{}); // AIRZ (Patch 11): rgba8unorm
 #endif
 
 class ScopedScriptedObjectContext

@@ -54,6 +54,10 @@ static GLenum oreFormatToGLInternal(TextureFormat fmt)
             return GL_RGBA8_SNORM;
         case TextureFormat::bgra8unorm:
             return GL_RGBA8;
+#ifdef GL_RGBA16
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11): desktop GL
+            return GL_RGBA16;
+#endif
         case TextureFormat::rgba16float:
             return GL_RGBA16F;
         case TextureFormat::rg16float:

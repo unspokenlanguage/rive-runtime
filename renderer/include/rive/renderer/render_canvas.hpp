@@ -11,6 +11,16 @@
 namespace rive::gpu
 {
 
+// AIRZ (Patch 11): a canvas's colour format. rgba16unorm keeps more than 8
+// bits between a 3D pass and the 2D draw that composites it (a 16-bit render
+// target). Backends that cannot allocate it make rgba8unorm instead
+// (RenderContextImpl::supportsCanvasFormat) and the canvas says so.
+enum class CanvasFormat : uint8_t
+{
+    rgba8unorm,
+    rgba16unorm,
+};
+
 // The image half of a RenderCanvas. A recording refers to a canvas by this
 // object, so the identity is fixed at creation while the texture waits for the
 // device that ends up replaying.
@@ -35,14 +45,25 @@ public:
 class RenderCanvas : public RefCnt<RenderCanvas>
 {
 public:
-    RenderCanvas(uint32_t width, uint32_t height) :
+    RenderCanvas(uint32_t width,
+                 uint32_t height,
+                 CanvasFormat format = CanvasFormat::rgba8unorm) :
         m_renderImage(make_rcp<RenderCanvasImage>(width, height)),
         m_width(width),
-        m_height(height)
+        m_height(height),
+        m_format(format)
     {}
 
     uint32_t width() const { return m_width; }
     uint32_t height() const { return m_height; }
+    CanvasFormat format() const { return m_format; } // AIRZ (Patch 11)
+    // AIRZ (Patch 11): before backing only, when the device cannot make the
+    // requested format.
+    void setFormat(CanvasFormat format)
+    {
+        assert(!isBacked());
+        m_format = format;
+    }
 
     bool isBacked() const { return m_renderTarget != nullptr; }
 
@@ -64,6 +85,7 @@ private:
     rcp<RenderTarget> m_renderTarget;
     uint32_t m_width;
     uint32_t m_height;
+    CanvasFormat m_format = CanvasFormat::rgba8unorm; // AIRZ (Patch 11)
 };
 
 } // namespace rive::gpu

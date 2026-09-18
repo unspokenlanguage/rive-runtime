@@ -322,6 +322,16 @@ public:
     // replaying the recording owns the pixels and backs it there.
     rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height);
 
+    // AIRZ (Patch 11): the same with a colour format (rgba16unorm for more
+    // than 8 bits). Separate overloads keep the two-argument symbols, which
+    // wasm modules import by name.
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height,
+                                       CanvasFormat format);
+    rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width,
+                                               uint32_t height,
+                                               CanvasFormat format);
+
     rive::ore::Context* ore() override;
     rive::ore::Context* getOreContext() { return ore(); }
 #endif

@@ -41,6 +41,8 @@ static wgpu::TextureFormat oreFormatToWGPU(TextureFormat fmt)
             return wgpu::TextureFormat::RGBA8Snorm;
         case TextureFormat::bgra8unorm:
             return wgpu::TextureFormat::BGRA8Unorm;
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11): not in core WebGPU
+            return wgpu::TextureFormat::Undefined;
         case TextureFormat::rgba16float:
             return wgpu::TextureFormat::RGBA16Float;
         case TextureFormat::rg16float:

@@ -25,6 +25,10 @@ static GLenum oreFormatToGLInternal(TextureFormat fmt)
         case TextureFormat::bgra8unorm:
             // GLES3 doesn't have GL_BGRA8; use RGBA8 (swizzle in shader).
             return GL_RGBA8;
+#ifdef GL_RGBA16
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11): desktop GL
+            return GL_RGBA16;
+#endif
         case TextureFormat::rgba16float:
             return GL_RGBA16F;
         case TextureFormat::rg16float:
@@ -98,6 +102,7 @@ static GLenum oreFormatToGLFormat(TextureFormat fmt)
         case TextureFormat::rgba8snorm:
         case TextureFormat::bgra8unorm:
         case TextureFormat::rgba16float:
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
         case TextureFormat::rgba32float:
             return GL_RGBA;
         case TextureFormat::rgb10a2unorm:
@@ -140,6 +145,7 @@ static GLenum oreFormatToGLType(TextureFormat fmt)
         case TextureFormat::r11g11b10float:
             return GL_UNSIGNED_INT_10F_11F_11F_REV;
         case TextureFormat::depth16unorm:
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
             return GL_UNSIGNED_SHORT;
         case TextureFormat::depth24plusStencil8:
             return GL_UNSIGNED_INT_24_8;

@@ -40,6 +40,8 @@ static MTLPixelFormat oreFormatToMTL(TextureFormat format)
             return MTLPixelFormatRGBA8Snorm;
         case TextureFormat::bgra8unorm:
             return MTLPixelFormatBGRA8Unorm;
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
+            return MTLPixelFormatRGBA16Unorm;
         case TextureFormat::rgba16float:
             return MTLPixelFormatRGBA16Float;
         case TextureFormat::rg16float:
@@ -356,6 +358,8 @@ static TextureFormat mtlFormatToOre(MTLPixelFormat fmt)
             return TextureFormat::bgra8unorm;
         case MTLPixelFormatRGBA16Float:
             return TextureFormat::rgba16float;
+        case MTLPixelFormatRGBA16Unorm: // AIRZ (Patch 11)
+            return TextureFormat::rgba16unorm;
         case MTLPixelFormatRGB10A2Unorm:
             return TextureFormat::rgb10a2unorm;
         default:

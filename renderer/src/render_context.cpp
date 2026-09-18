@@ -189,6 +189,21 @@ rcp<RenderCanvas> RenderContext::makeDeferredRenderCanvas(uint32_t width,
 {
     return m_impl->makeDeferredRenderCanvas(width, height);
 }
+
+// AIRZ (Patch 11)
+rcp<RenderCanvas> RenderContext::makeRenderCanvas(uint32_t width,
+                                                  uint32_t height,
+                                                  CanvasFormat format)
+{
+    return m_impl->makeRenderCanvas(width, height, format);
+}
+
+rcp<RenderCanvas> RenderContext::makeDeferredRenderCanvas(uint32_t width,
+                                                          uint32_t height,
+                                                          CanvasFormat format)
+{
+    return m_impl->makeDeferredRenderCanvas(width, height, format);
+}
 rive::ore::Context* RenderContext::ore()
 {
     if (m_oreContext == nullptr)

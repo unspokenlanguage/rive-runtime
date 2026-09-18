@@ -86,6 +86,10 @@ enum class TextureFormat : uint8_t
     astc4x4,
     astc6x6,
     astc8x8,
+
+    // AIRZ (Patch 11): 16-bit unsigned normalized colour, last so the values
+    // above keep their numbers.
+    rgba16unorm,
 };
 
 // Returns bytes per texel for uncompressed formats, or 0 for block-compressed
@@ -105,6 +109,7 @@ inline uint32_t textureFormatBytesPerTexel(TextureFormat fmt)
         case TextureFormat::bgra8unorm:
             return 4;
         case TextureFormat::rgba16float:
+        case TextureFormat::rgba16unorm: // AIRZ (Patch 11)
             return 8;
         case TextureFormat::rg16float:
             return 4;
