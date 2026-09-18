@@ -22,6 +22,12 @@ struct D3D11Stats
     std::atomic<uint64_t> texturesCreated{0};
     std::atomic<uint64_t> texturesDestroyed{0};
     std::atomic<uint64_t> renderPasses{0};
+    // Shader modules: HLSL compiled here vs. bytecode reused (see the cache in
+    // ore_shader_module_d3d11.cpp).
+    std::atomic<uint64_t> shaderCompiles{0};
+    std::atomic<uint64_t> shaderCompileMicros{0};
+    std::atomic<uint64_t> shaderMemoryHits{0};
+    std::atomic<uint64_t> shaderDiskHits{0};
 };
 
 inline D3D11Stats& d3d11Stats()

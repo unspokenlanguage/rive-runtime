@@ -2,7 +2,7 @@
 
 What we change in `rive-runtime/` relative to upstream (`https://github.com/rive-app/rive-runtime.git`), why, and — just as important — what we **used to** change and no longer need to. The sync procedure that keeps this list honest is `UPDATING_RIVE.md`; its §3 defines the triage rule: *every patch is re-verified against fresh upstream on every sync; anything upstream now covers moves to "Retired" with evidence.*
 
-**Currently at:** `runtime-v0.1.359` (2026-09-05) — fork `unspokenlanguage/rive-runtime`, branch `airz/merge-v0.1.359`, consumed as a submodule by AirPlayEngine and the airZStudio editor, which must pin the same commit. **Active patches: 3** (5, 6, 7). **Retired: 4** (1, 2, 3, 4) + one null guard.
+**Currently at:** `runtime-v0.1.359` (2026-09-05) — fork `unspokenlanguage/rive-runtime`, branch `airz/merge-v0.1.359`, consumed as a submodule by AirPlayEngine and the airZStudio editor, which must pin the same commit. **Active patches: 5** (5, 6, 7, 8, 9). **Retired: 4** (1, 2, 3, 4) + one null guard.
 
 ---
 
@@ -101,6 +101,26 @@ What we change in `rive-runtime/` relative to upstream (`https://github.com/rive
 > A small `m_layoutData == nullptr` guard was also kept in `LayoutComponent::calculateLayoutInternal` as defensive null-safety (harmless). The engine side (`rive_producer.cpp`) forces a layout pass at load via `artboard->syncStyleChangesWithUpdate(true)` after the state machine settles, so layout-mode components are sized before the first rendered frame.
 
 ---
+
+---
+
+## Patch 8: D3D11 Ore allocation and update counters (diagnostic)
+* **Files:** `renderer/include/rive/renderer/ore/ore_d3d11_stats.hpp` (new), `renderer/src/ore/d3d11/ore_buffer_d3d11.{hpp,cpp}`, `ore_texture_d3d11.hpp`, `ore_context_d3d11.cpp`
+* **Added:** 2026-09-15 (`fa2872d2`), recorded here 2026-09-18.
+* **What:** monotonic counters in an inline function-local static (`rive::ore::d3d11Stats()`): buffers and textures created/destroyed with bytes, `WRITE_DISCARD` updates with bytes, render passes — and, with Patch 9, shader compiles, compile time and cache hits. No behaviour change and no ABI change; nothing in the backend reads them.
+* **Why:** AirPlayEngine's `[rive-mem]` and shader lines print deltas of these. They ruled the Ore backend out of a suspected leak (the real cause was the NDI consumer's unbounded queue) and are how Patch 9 is measured.
+* **On sync:** re-apply mechanically — increment sites are one line each at buffer/texture construction and destruction, `BufferD3D11::update`, `ContextD3D11::beginRenderPass`, and the shader compile path. If upstream adds its own statistics, drop this and switch the host to them.
+
+---
+
+## Patch 9: D3D11 Ore compiled-shader cache (memory + disk)
+* **File:** `renderer/src/ore/d3d11/ore_shader_module_d3d11.cpp`
+* **Added:** 2026-09-18.
+* **Symptom:** every load of a scripted 3D layer spent ~750–1,150 ms in `D3DCompile` (optimisation level 3, the editor's full PBR shader), because every render context builds its own shader modules and nothing was reused — in the same process or across restarts. That landed on the first on-air frame of any template not armed in advance, and on every discrete edit in the editor's host.
+* **Resolution:** the DXBC is a pure function of (HLSL source, entry point, target, compile flags, `D3D_COMPILER_VERSION`), so it is cached under that key: two independent 64-bit hashes over all inputs (the file name carries both). Memory level: process-wide, bounded at 64 MB, cleared when exceeded. Disk level: one `.dxbc` per module in `AIRZ_ORE_SHADER_CACHE` (a path) or `%LOCALAPPDATA%irZStudio\ore-shader-cache`; accepted only if it is a DXBC container whose declared size matches; written to a temp file and renamed into place. `AIRZ_ORE_SHADER_CACHE=0` disables both levels.
+* **Measured** (materials sample, RTX A4500, fresh process each): cache off — 2 compiles, 750–800 ms, first on-air frame 862–918 ms; first ever load with the cache — 1,283 ms, then written; second load in the same process — 132 ms (2 from memory); cold start with the disk filled — 148 ms (2 from disk). Picture unchanged: 99.90% of pixels within 8/255 of the editor's reference, as before.
+* **On sync:** re-apply around upstream's `D3DCompile` call. If upstream adds a shader cache or a host hook to supply bytecode, prefer it and move this to *Retired*.
+* **Consumers:** both parents get it through the submodule pin — the editor's preview and exporter tests compile the same shaders and share the same disk directory on one machine (identical key, so identical bytes).
 
 ---
 
@@ -362,3 +382,4 @@ Patches upstream now covers, or that turned out to be no-ops. Retired after the 
 |---|---|---|---|
 | 2026-09-05 | `runtime-v0.1.230` (`4a10679b`) → `runtime-v0.1.359` (`621f2a2e`), 129 upstream commits | `9e498b2635…` → `a87af1c977…` | Git 3-way rebase in the nested workbench (`UPDATING_RIVE.md` §1). Kept P5, P6, P7. **P1/P2/P3 retired** — dropped test-first, then all 7 on-air checks (`UPDATING_RIVE.md` §8) passed on unmodified upstream 2026-09-05. Yoga → `v2_0_1_3_grid` (10 grid symbols required), `rive_yoga` → C++20. Luau → `rive_0_734`. HarfBuzz stays `10.1.0` (only Apple-only `hb_ct_*` missing). Added `WITH_RIVE_SCRIPTING_LUAU`; excluded `src/wasm`. Full record: `docs/RIVE_SYNC_PLAN_2026-09.md`. |
 | 2026-09-05 | layout change, same runtime: plain-file tree → **submodule** on fork branch `airz/merge-v0.1.359` (`3eb17fe3`, dependency trees vendored on the branch in `4e9d14ee`); editor pinned to the same commit | unchanged | Content byte-identical to the tracked tree; rollback tag `rive-pre-submodule-2026-09-05`. Docs reconciled the same day (`upstream` remote + tags were missing from the checkout; §2 step 2, §8b, §9 rewritten for the two-parent layout). |
+| 2026-09-18 | same runtime (`runtime-v0.1.359`) | unchanged | Patch 8 (D3D11 Ore counters, `fa2872d2`) recorded; **Patch 9** added — compiled-shader cache in memory and on disk: first on-air frame of the materials sample 862–918 ms → 132–148 ms, picture unchanged. |
