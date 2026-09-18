@@ -130,6 +130,18 @@ What we change in `rive-runtime/` relative to upstream (`https://github.com/rive
 * **On sync:** re-apply around both `D3DCompile` calls. If upstream adds a shader cache or a host hook to supply bytecode, prefer it and move this to *Retired*.
 * **Consumers:** both parents through the submodule pin; on one machine they share the disk directory (identical key, identical bytes).
 
+## Patch 10: 16-bit render target and high-precision gradients (10-bit Rive output)
+* **Files:** `renderer/include/rive/renderer/d3d/d3d.hpp` (`D3DCapabilities::supportsTypedUAVLoadStore16`, `D3DContextOptions::highPrecisionGradients`), `renderer/include/rive/renderer/gpu.hpp` (`PlatformFeatures::highPrecisionGradients`), `renderer/src/render_context.cpp` (`LogicalFlush::allocateGradient`), `renderer/src/d3d11/render_context_d3d_impl.cpp` and its header (`RenderTargetD3D::is16`, RTV/UAV/offscreen/scratch formats, gradient texture format, `supports16BitTargets()`).
+* **Added:** 2026-09-18 (CasparFork `docs/plans/P2B_10BIT_RIVE.md`, steps R1–R2).
+* **Why:** a 16-bit playout channel carries 10-bit video, but Rive rendered 8-bit: the render target accepted only RGBA8/BGRA8, and a two-stop gradient is a two-texel ramp whose bilinear weights have ~8 bits — 257 levels across any length, even into a 16-bit target with a 16-bit ramp texture (measured).
+* **Resolution:**
+  - `RenderTargetD3D` accepts `R16G16B16A16_UNORM`/`TYPELESS`: RTV, typed UAV (raster-ordering mode), offscreen and scratch-colour textures follow the target's depth (`is16()`). The shaders are unchanged: the raster-ordering colour plane is declared `unorm half4`, which any UNORM format satisfies.
+  - `supportsTypedUAVLoadStore16` is probed with the other typed-UAV formats; `RenderContextD3DImpl::supports16BitTargets()` = ROV && typed 16-bit UAVs. **Note:** the capability probe runs only on a feature-level 11.1 device; a host that wants 16-bit targets creates its device at 11.1 (CasparFork does so for 16-bit channels only; 8-bit channels and the editor stay at 11.0, where Rive uses atomic mode).
+  - `D3DContextOptions::highPrecisionGradients` (off by default): the gradient texture is `R16G16B16A16_UNORM`, and a two-stop gradient is rendered as a full 512-texel ramp row (the complex path) instead of two texels. One-stop (solid) stays simple.
+* **Measured** (RTX A4500, the editor's key test on a 16-bit channel): the white-to-transparent ramp has 1,600 distinct alpha levels across 1,600 px (8-bit: 256), largest step 0.16 of an 8-bit level; the picture matches the 8-bit channel within 0.06 levels mean (premultiplied), soccer analysis within 0.34; 8-bit channels unchanged (option off, level 11.0).
+* **On sync:** re-apply in `render_context_d3d_impl.cpp` (format switches) and `allocateGradient`. Atomic mode (packed 32-bit colour) is not covered: a 16-bit target there needs shader work.
+* **Consumers:** CasparFork on 16-bit channels. The editor is unaffected (option off, 8-bit targets).
+
 ---
 
 ## Retired patches — resolved, kept for the record

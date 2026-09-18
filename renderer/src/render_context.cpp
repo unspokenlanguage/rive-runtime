@@ -596,7 +596,14 @@ bool RenderContext::LogicalFlush::allocateGradient(
     size_t stopCount = gradient->count();
     assert(stopCount > 0); // RiveRenderFactory guarantees this.
 
-    if (stopCount == 1 || (stopCount == 2 && stops[0] == 0 && stops[1] == 1))
+    // AIRZ (Patch 10): with high-precision gradients a two-stop gradient is
+    // rendered as a full ramp row, like a complex one; a single stop is a
+    // solid colour and stays a (precise) simple ramp.
+    const bool twoTexelRamp =
+        stopCount == 1 ||
+        (stopCount == 2 && stops[0] == 0 && stops[1] == 1 &&
+         !m_ctx->platformFeatures().highPrecisionGradients);
+    if (twoTexelRamp)
     {
         // This is a simple gradient that can be implemented by a two-texel
         // color ramp.

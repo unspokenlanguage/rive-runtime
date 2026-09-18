@@ -39,6 +39,13 @@ public:
     ID3D11UnorderedAccessView* scratchColorUAV();
     ID3D11UnorderedAccessView* coverageUAV();
 
+    // AIRZ (Patch 10): a 16-bit UNORM target (R16G16B16A16).
+    bool is16() const
+    {
+        return m_targetFormat == DXGI_FORMAT_R16G16B16A16_UNORM ||
+               m_targetFormat == DXGI_FORMAT_R16G16B16A16_TYPELESS;
+    }
+
 private:
     const ComPtr<ID3D11Device> m_gpu;
     const bool m_gpuSupportsTypedUAVLoadStore;
@@ -173,6 +180,16 @@ private:
 class RenderContextD3DImpl : public RenderContextHelperImpl
 {
 public:
+    // AIRZ (Patch 10): can this context draw into an R16G16B16A16_UNORM
+    // target? Needs raster-ordering mode with typed 16-bit UAV load/store
+    // (atomic mode packs colour into 32-bit words).
+    bool supports16BitTargets() const
+    {
+        return m_d3dCapabilities.supportsRasterizerOrderedViews &&
+               m_d3dCapabilities.supportsTypedUAVLoadStore16;
+    }
+    bool highPrecisionGradients() const { return m_highPrecisionGradients; }
+
     static std::unique_ptr<RenderContext> MakeContext(
         ComPtr<ID3D11Device>,
         ComPtr<ID3D11DeviceContext>,
@@ -259,6 +276,7 @@ private:
 #endif
 
     const D3DCapabilities m_d3dCapabilities;
+    bool m_highPrecisionGradients = false; // AIRZ (Patch 10)
 
     ComPtr<ID3D11Device> m_gpu;
     ComPtr<ID3D11DeviceContext> m_gpuContext;

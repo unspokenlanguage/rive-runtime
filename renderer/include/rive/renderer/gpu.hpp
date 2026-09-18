@@ -130,6 +130,9 @@ struct PlatformFeatures
     // FIXME: depthStencil is implicit even though it isn't implemented on all
     // backends.
     bool supportsRasterOrderingMode = false;
+    // AIRZ (Patch 10): render two-stop gradients as full ramp rows (see
+    // D3DContextOptions::highPrecisionGradients).
+    bool highPrecisionGradients = false;
     bool supportsAtomicMode = false;
     bool supportsClockwiseMode = false;
     // InterlockMode::Clockwise with fixedFunctionColorOutput and srcOver blend.

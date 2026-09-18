@@ -521,6 +521,8 @@ std::unique_ptr<RenderContext> RenderContextD3DImpl::MakeContext(
                 d3dCapabilities.supportsTypedUAVLoadStore =
                     check_typed_uav_load(DXGI_FORMAT_R8G8B8A8_UNORM) &&
                     check_typed_uav_load(DXGI_FORMAT_B8G8R8A8_UNORM);
+                d3dCapabilities.supportsTypedUAVLoadStore16 =
+                    check_typed_uav_load(DXGI_FORMAT_R16G16B16A16_UNORM);
             }
         }
 
@@ -580,6 +582,8 @@ RenderContextD3DImpl::RenderContextD3DImpl(
         d3dCapabilities.supportsRasterizerOrderedViews;
     m_platformFeatures.supportsAtomicMode = true;
     m_platformFeatures.maxTextureSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    m_highPrecisionGradients = d3dContextOptions.highPrecisionGradients;
+    m_platformFeatures.highPrecisionGradients = m_highPrecisionGradients;
 
     m_platformFeatures.supportsClipScissor = true;
 
@@ -1383,6 +1387,10 @@ ID3D11RenderTargetView* RenderTargetD3D::targetRTV()
             case DXGI_FORMAT_B8G8R8A8_TYPELESS:
                 desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
                 break;
+            case DXGI_FORMAT_R16G16B16A16_UNORM: // AIRZ (Patch 10): 16-bit target
+            case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+                desc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+                break;
 
             default:
                 RIVE_UNREACHABLE();
@@ -1403,7 +1411,8 @@ ID3D11Texture2D* RenderTargetD3D::offscreenTexture()
     {
         m_offscreenTexture =
             make_simple_2d_texture(m_gpu.Get(),
-                                   DXGI_FORMAT_R8G8B8A8_TYPELESS,
+                                   is16() ? DXGI_FORMAT_R16G16B16A16_TYPELESS // AIRZ (Patch 10)
+                                          : DXGI_FORMAT_R8G8B8A8_TYPELESS,
                                    width(),
                                    height(),
                                    1,
@@ -1434,6 +1443,10 @@ ID3D11UnorderedAccessView* RenderTargetD3D::targetUAV()
                     targetUavFormat = m_gpuSupportsTypedUAVLoadStore
                                           ? DXGI_FORMAT_B8G8R8A8_UNORM
                                           : DXGI_FORMAT_R32_UINT;
+                    break;
+                case DXGI_FORMAT_R16G16B16A16_UNORM: // AIRZ (Patch 10): typed UAV only
+                case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+                    targetUavFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
                     break;
                 default:
                     RIVE_UNREACHABLE();
@@ -1471,7 +1484,8 @@ ID3D11UnorderedAccessView* RenderTargetD3D::scratchColorUAV()
     {
         m_scratchColorTexture =
             make_simple_2d_texture(m_gpu.Get(),
-                                   DXGI_FORMAT_R8G8B8A8_TYPELESS,
+                                   is16() ? DXGI_FORMAT_R16G16B16A16_TYPELESS // AIRZ (Patch 10)
+                                          : DXGI_FORMAT_R8G8B8A8_TYPELESS,
                                    width(),
                                    height(),
                                    1,
@@ -1481,7 +1495,8 @@ ID3D11UnorderedAccessView* RenderTargetD3D::scratchColorUAV()
     {
         m_scratchColorUAV = make_simple_2d_uav(m_gpu.Get(),
                                                m_scratchColorTexture.Get(),
-                                               m_gpuSupportsTypedUAVLoadStore
+                                               is16() ? DXGI_FORMAT_R16G16B16A16_UNORM // AIRZ (Patch 10)
+                                               : m_gpuSupportsTypedUAVLoadStore
                                                    ? DXGI_FORMAT_R8G8B8A8_UNORM
                                                    : DXGI_FORMAT_R32_UINT);
     }
@@ -1519,7 +1534,9 @@ void RenderContextD3DImpl::resizeGradientTexture(uint32_t width,
     }
     else
     {
-        m_gradTexture = makeSimple2DTexture(DXGI_FORMAT_R8G8B8A8_UNORM,
+        // AIRZ (Patch 10): 16-bit ramps with high-precision gradients.
+        const bool grad16 = m_highPrecisionGradients;
+        m_gradTexture = makeSimple2DTexture(grad16 ? DXGI_FORMAT_R16G16B16A16_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM,
                                             width,
                                             height,
                                             1,
