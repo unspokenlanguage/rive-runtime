@@ -155,6 +155,15 @@ What we change in `rive-runtime/` relative to upstream (`https://github.com/rive
 * **On sync:** re-apply the format tables and the deferred proxy format; keep `rgba16unorm` last in `TextureFormat`.
 * **Consumers:** CasparFork (16-bit channels). The editor: its 3D script asks for `rgba16unorm` when the host says the channel is 16-bit (step D1); nothing changes until it does.
 
+## Patch 12: stencil load/store from scripts
+* **File:** `src/lua/renderer/lua_gpu.cpp` (`beginRenderPass`: `depthStencil.stencilLoadOp`, `stencilStoreOp`, `stencilClearValue`).
+* **Added:** 2026-09-19 (airZ editor 3D plan, Phase 10.7: stencil masking).
+* **Why:** a script's render pass read the depth attachment's load/store and clear value but not the stencil's, so the stencil was always cleared at the start of every pass (`LoadOp::clear`, the struct default). A mask drawn in one pass could never reach the pass that tests it: the 2026-09-17 masking attempt drew no 3D at all, with no error.
+* **Resolution:** the three fields are read when present, with the previous behaviour as the default (`clear`, `discard`, 0). The recording path already carried them (`ore_commands.hpp`, `ore_render_pass_recording.hpp`); the D3D11 backend clears stencil only on `clear` and keeps stored data regardless of the store op.
+* **Also found (no change needed):** a pipeline is rejected, and every draw with it dropped, unless it declares the pass's exact depth format (`checkPipelineCompat`); the error goes to the Ore context's `lastError`, not to the script. A scene pass given a `depth24plus-stencil8` attachment needs every pipeline drawn in it declared with that format.
+* **On sync:** re-apply if upstream's `beginRenderPass` still skips the stencil fields.
+* **Consumers:** the editor's 3D engine script (stencil masking).
+
 ---
 
 ## Retired patches — resolved, kept for the record

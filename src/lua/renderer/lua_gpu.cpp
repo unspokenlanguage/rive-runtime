@@ -2892,6 +2892,33 @@ int gpucanvas_beginrenderpass(lua_State* L)
                 static_cast<float>(lua_tonumber(L, -1));
         }
         lua_pop(L, 1);
+
+        // AIRZ (Patch 12): the stencil's load/store and clear value. They
+        // were not read, so a script's stencil was always cleared at the
+        // start of a pass: a mask drawn in one pass could never reach the
+        // next one, and a masked scene drew nothing (with no error). The
+        // defaults are the previous behaviour.
+        lua_getfield(L, -1, "stencilLoadOp");
+        if (!lua_isnil(L, -1))
+        {
+            passDesc.depthStencil.stencilLoadOp =
+                lua_toloadop_str(luaL_checkstring(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "stencilStoreOp");
+        if (!lua_isnil(L, -1))
+        {
+            passDesc.depthStencil.stencilStoreOp =
+                lua_tostoreop_str(luaL_checkstring(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "stencilClearValue");
+        if (!lua_isnil(L, -1))
+        {
+            passDesc.depthStencil.stencilClearValue =
+                static_cast<uint32_t>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
     }
     lua_pop(L, 1); // depthStencil
 
